@@ -1,0 +1,15 @@
+{
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "type": "module",
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^25.9.1",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^4.3.0"
+  },
+  "dependencies": {
+    "@prisma/adapter-better-sqlite3": "^7.8.0",
+    "@prisma/client": "^6.19.3",
+    "dotenv": "^17.4.2"
+  }
+}
