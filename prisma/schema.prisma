@@ -11,3 +11,47 @@ generator client {
 datasource db {
   provider = "sqlite"
 }
+
+model Aluno {
+  id          Int          @id @default(autoincrement())
+  nome        String
+  serie       String
+  
+  emprestimos Emprestimo[]
+
+  @@map("alunos")
+}
+
+model Livro {
+  id           Int          @id @default(autoincrement())
+  titulo       String
+  autor        String
+  numeroEdicao Int?
+  isbn         String?      @unique
+  editora      String?
+  quantidade   Int          @default(0)
+
+  emprestimos  Emprestimo[]
+
+  @@map("livros")
+}
+
+model Emprestimo {
+  id                    Int              @id @default(autoincrement())
+  alunoId               Int              @map("id_aluno")
+  livroId               Int              @map("id_livro")
+  dataHoraEmprestimo    DateTime         @default(now())
+  dataDevolucaoPrevista DateTime?
+  status                StatusEmprestimo @default(ATIVO)
+
+  aluno Aluno @relation(fields: [alunoId], references: [id])
+  livro Livro @relation(fields: [livroId], references: [id])
+
+  @@map("emprestimos")
+}
+
+enum StatusEmprestimo {
+  ATIVO
+  DEVOLVIDO
+  ATRASADO
+}
