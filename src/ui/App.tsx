@@ -1,116 +1,74 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+
+import logoIcon from './assets/icon.png';
 import './App.css'
 
-function App() {
-  const [count, setCount] = useState(0)
+
+export default function App() {
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
-        </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.tsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+    <div className="flex h-screen w-screen bg-white font-sans overflow-hidden">
+      
+      <aside className="w-64 flex flex-col pt-16 relative bg-white flex-shrink-0">
 
-      <div className="ticks"></div>
+        <div className="absolute right-0 top-0 bottom-0 w-2 bg-gray-300" />
+        
+        <nav className="flex flex-col gap-6 pl-6 z-10">
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+          <div className="flex items-center gap-3 text-2xl font-normal text-gray-800 cursor-pointer">
+            <span className="w-6 h-6 bg-cyan-400 block" /> {/* Marcador Ciano */}
+            <span>Home</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9">
+            <span>Acervo</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9">
+            <span>Empréstimos</span>
+          </div>
+          
+          <div className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9">
+            <span>Alunos</span>
+          </div>
+        </nav>
+      </aside>
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+      <main className="flex-1 flex flex-col items-center pt-16 px-12 bg-white overflow-y-auto">
+        
+        <header className="flex items-center justify-center gap-6 mb-12 w-full max-w-3xl">
+          <h1 className="text-3xl font-medium tracking-wide text-center text-gray-800">
+            Seja bem-vindo ao EasyLib Manager
+          </h1>
+          
+          <img 
+            src={logoIcon} 
+            className="w-32 h-32 object-contain flex-shrink-0"
+          />
+        </header>
+
+        <section className="w-full max-w-3xl flex flex-col">
+          <h1 className="text-xl font-normal text-center font-semibold text-gray-800 mb-4">
+            Empréstimos próximos do vencimento:
+          </h1>
+          
+
+          <div className="w-full h-96 bg-[#E2E6F3] border-2 border-black rounded-none p-6 overflow-y-auto shadow-sm">
+          </div>
+
+          <footer className="flex items-center gap-8 mt-4 pl-2">
+            <div className="flex items-center gap-3">
+              <span className="w-6 h-6 rounded-full bg-red-600 block" />
+              <span className="text-lg font-normal font-semibold text-gray-900">Atrasados</span>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <span className="w-6 h-6 rounded-full bg-yellow-400 block" />
+              <span className="text-lg font-normal font-semibold text-gray-900">Faltam 3 dias ou menos</span>
+            </div>
+          </footer>
+        </section>
+
+      </main>
+    </div>
+  );
 }
-
-export default App
