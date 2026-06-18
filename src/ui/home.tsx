@@ -1,13 +1,12 @@
-
 import logoIcon from './assets/icon.png';
 import './App.css'
 import { Link } from "react-router-dom";
-
 
 export default function Home() {
     return (
         <div className="flex h-screen w-screen bg-white font-sans overflow-hidden">
 
+            {/* Sidebar / Barra Lateral */}
             <aside className="w-64 flex flex-col pt-16 relative bg-white flex-shrink-0">
                 <div className="absolute right-0 top-0 bottom-0 w-2 bg-gray-300" />
                 <nav className="flex flex-col gap-6 pl-6 z-10">
@@ -38,36 +37,44 @@ export default function Home() {
                 </nav>
             </aside>
 
-            <main className="flex-1 flex flex-col items-center pt-16 px-12 bg-white overflow-y-auto">
-                <header className="flex items-center justify-center gap-6 mb-12 w-full max-w-3xl">
-                    <h1 className="text-3xl font-medium tracking-wide text-center text-gray-800">
+            {/* Conteúdo Principal Ampliado */}
+            <main className="flex-1 flex flex-col items-center pt-8 px-12 bg-white overflow-y-auto">
+                
+                {/* Header centralizado com espaçamento reduzido */}
+                <header className="flex items-center justify-center gap-6 mb-6 w-full max-w-7xl">
+                    <h1 className="text-4xl font-medium tracking-wide text-center text-gray-800">
                         Seja bem-vindo ao EasyLib Manager
                     </h1>
 
                     <img
                         src={logoIcon}
-                        className="w-32 h-32 object-contain flex-shrink-0"
+                        className="w-24 h-24 object-contain flex-shrink-0"
+                        alt="Logo"
                     />
                 </header>
 
-                <section className="w-full max-w-3xl flex flex-col">
-                    <h1 className="text-xl font-normal text-center font-semibold text-gray-800 mb-4">
-                        Empréstimos próximos do vencimento:
-                    </h1>
+                <section className="w-full max-w-7xl flex flex-col h-full justify-between pb-8">
+                    <div>
+                        <h2 className="text-xl font-semibold text-gray-800 text-center mb-4">
+                            Empréstimos próximos do vencimento:
+                        </h2>
 
-
-                    <div className="w-full h-96 bg-[#E2E6F3] border-2 border-black rounded-none p-6 overflow-y-auto shadow-sm">
+                        {/* ALTURA EXPANDIDA PARA 65vh (O dobro do h-96 original) */}
+                        <div className="w-full h-[65vh] bg-[#E2E6F3] border-2 border-black rounded-md p-6 overflow-y-auto shadow-sm">
+                            {/* A lista ou tabela de empréstimos pendentes entra aqui */}
+                        </div>
                     </div>
 
+                    {/* Legendas na base do dashboard */}
                     <footer className="flex items-center gap-8 mt-4 pl-2">
                         <div className="flex items-center gap-3">
                             <span className="w-6 h-6 rounded-full bg-red-600 block" />
-                            <span className="text-lg font-normal font-semibold text-gray-900">Atrasados</span>
+                            <span className="text-lg font-semibold text-gray-900">Atrasados</span>
                         </div>
 
                         <div className="flex items-center gap-3">
                             <span className="w-6 h-6 rounded-full bg-yellow-400 block" />
-                            <span className="text-lg font-normal font-semibold text-gray-900">Faltam 3 dias ou menos</span>
+                            <span className="text-lg font-semibold text-gray-900">Faltam 3 dias ou menos</span>
                         </div>
                     </footer>
                 </section>

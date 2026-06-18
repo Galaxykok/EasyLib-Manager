@@ -29,7 +29,7 @@ model Livro {
   numeroEdicao Int?
   isbn         String?      @unique
   editora      String?
-  quantidade   Int          @default(0)
+  unidade      Int          @default(1)
 
   emprestimos  Emprestimo[]
 

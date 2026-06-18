@@ -13,7 +13,7 @@ CREATE TABLE "livros" (
     "numeroEdicao" INTEGER,
     "isbn" TEXT,
     "editora" TEXT,
-    "quantidade" INTEGER NOT NULL DEFAULT 0
+    "unidade" INTEGER NOT NULL DEFAULT 1
 );
 
 -- CreateTable
