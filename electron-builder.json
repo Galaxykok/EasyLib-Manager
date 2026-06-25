@@ -1,7 +1,7 @@
 {
     "appId": "com.monsenhor-luis-gonzaga-de-moura.easylibmanager",
     "files": ["dist-react", "dist-electron"],
-    "icon": "./icon.jpg",
+    "icon": "./src/assets/icontask.png",
     "mac": {
         "target": "dmg"
     },

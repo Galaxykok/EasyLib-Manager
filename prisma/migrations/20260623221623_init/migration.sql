@@ -29,4 +29,4 @@ CREATE TABLE "emprestimos" (
 );
 
 -- CreateIndex
-CREATE UNIQUE INDEX "livros_isbn_key" ON "livros"("isbn");
+CREATE UNIQUE INDEX "livros_id_key" ON "livros"("id");

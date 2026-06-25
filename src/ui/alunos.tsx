@@ -60,7 +60,6 @@ export default function Alunos() {
                 </nav>
             </aside>
 
-            {/* Conteúdo Principal */}
             <main className="flex-1 flex flex-col items-center pt-8 px-12 bg-white overflow-y-auto">
                 <div className="w-full max-w-7xl flex flex-col h-full justify-between pb-8">
                     
@@ -72,8 +71,6 @@ export default function Alunos() {
                         <div className="w-full bg-[#DCE2F4] border border-gray-600 rounded-md p-6 h-[60vh] flex flex-col gap-4 overflow-auto shadow-sm">
                         </div>
                     </div>
-
-                    {/* Barra de Ações Inferior */}
                     <div className="w-full flex items-center justify-between mt-6">
                         <input 
                             type="text" 
@@ -92,7 +89,6 @@ export default function Alunos() {
                 </div>
             </main>
 
-            {/* Pop-up do Formulário Direto */}
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-8 w-full max-w-xl shadow-2xl border border-gray-200 relative">
@@ -125,7 +121,6 @@ export default function Alunos() {
                                     </div>
                                 </div>
 
-                                {/* Ações do Formulário */}
                                 <div className="flex gap-4 justify-end mt-6 pt-4 border-t border-gray-100">
                                     <button 
                                         type="button" 
