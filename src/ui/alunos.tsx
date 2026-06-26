@@ -1,12 +1,12 @@
 import { useState } from 'react';
-import type { ChangeEvent, FormEvent } from 'react';
+//import type { ChangeEvent} from 'react';
+import type { FormEvent } from 'react';
 import { Link } from "react-router-dom";
 import "./App.css";
 
 interface CadastroAlunoForm {
     nome: string;
     turma: string;
-    matricula: string;
 }
 
 export default function Alunos() {
@@ -15,27 +15,57 @@ export default function Alunos() {
 
     const [formData, setFormData] = useState<CadastroAlunoForm>({
         nome: '',
-        turma: '',
-        matricula: ''
+        turma: ''
     });
 
     const closeModal = (): void => {
         setIsModalOpen(false);
-        setFormData({ nome: '', turma: '', matricula: '' });
+        setFormData({ nome: '', turma: '' });
     };
-
-    const handleInputChange = (e: ChangeEvent<HTMLInputElement>): void => {
+    const handleInputChange = (
+        e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+    ) => {
         const { name, value } = e.target;
-        setFormData(prev => ({ ...prev, [name]: value }));
+
+        setFormData((prev) => ({
+            ...prev,
+            [name]: value,
+        }));
     };
 
     const handleCadastroSubmit = (e: FormEvent<HTMLFormElement>): void => {
         e.preventDefault();
-        
-        
+
+
         console.log("Aluno Cadastrado via TypeScript:", formData);
         closeModal();
     };
+
+    const turmas = [
+        "1º ano",
+        "2º ano",
+        "3º ano",
+        "4º ano",
+        "5º ano",
+        "6º ano",
+        "7º ano",
+        "8º ano",
+        "9º ano",
+        "1º ano médio",
+        "2º ano médio",
+        "3º ano médio",
+    ];
+
+    const [indiceTurma, setIndiceTurma] = useState(0);
+
+    const proximaTurma = () => {
+        setIndiceTurma((i) => Math.min(i + 1, turmas.length - 1));
+    };
+
+    const turmaAnterior = () => {
+        setIndiceTurma((i) => Math.max(i - 1, 0));
+    };
+
 
     return (
         <div className="flex h-screen w-screen bg-white font-sans overflow-hidden relative">
@@ -62,7 +92,7 @@ export default function Alunos() {
 
             <main className="flex-1 flex flex-col items-center pt-8 px-12 bg-white overflow-y-auto">
                 <div className="w-full max-w-7xl flex flex-col h-full justify-between pb-8">
-                    
+
                     <div>
                         <h1 className="text-7xl font-normal text-center text-black mb-8 tracking-wide">
                             Alunos
@@ -72,13 +102,13 @@ export default function Alunos() {
                         </div>
                     </div>
                     <div className="w-full flex items-center justify-between mt-6">
-                        <input 
-                            type="text" 
-                            placeholder="Pesquisar aluno..." 
+                        <input
+                            type="text"
+                            placeholder="Pesquisar aluno..."
                             className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
                         />
 
-                        <button 
+                        <button
                             onClick={() => setIsModalOpen(true)}
                             className="flex items-center gap-2 bg-[#006414] hover:bg-green-800 text-white font-normal text-lg px-6 py-3 rounded shadow transition-colors cursor-pointer"
                         >
@@ -92,8 +122,8 @@ export default function Alunos() {
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
                     <div className="bg-white rounded-lg p-8 w-full max-w-xl shadow-2xl border border-gray-200 relative">
-                        
-                        <button 
+
+                        <button
                             onClick={closeModal}
                             className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold focus:outline-none cursor-pointer"
                         >
@@ -102,34 +132,54 @@ export default function Alunos() {
 
                         <div>
                             <h2 className="text-3xl font-semibold text-gray-800 mb-6 text-center">Cadastro de Aluno</h2>
-                            
+
                             <form onSubmit={handleCadastroSubmit} className="space-y-4">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-sm font-medium text-gray-700">Nome do Aluno</label>
                                     <input required type="text" name="nome" value={formData.nome} onChange={handleInputChange} className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600" />
                                 </div>
 
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-sm font-medium text-gray-700">Turma (ex: 7° A)</label>
-                                        <input required type="text" name="turma" value={formData.turma} onChange={handleInputChange} className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600" />
-                                    </div>
+                                <div className="flex flex-col items-center w-full">
+                                    <label className="mb-2 text-sm font-medium text-gray-700">
+                                        Turma do Aluno
+                                    </label>
 
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-sm font-medium text-gray-700">Matrícula / RA</label>
-                                        <input required type="text" name="matricula" value={formData.matricula} onChange={handleInputChange} className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600" />
+                                    <div className="relative w-64">
+                                        <input
+                                            readOnly
+                                            value={turmas[indiceTurma]}
+                                            className="w-full h-10 border rounded px-3 pr-10"
+                                        />
+
+                                        <div className="absolute right-0 top-0 h-10 w-10 flex flex-col border-l bg-white">
+                                            <button
+                                                type="button"
+                                                onClick={proximaTurma}
+                                                className="h-5 flex items-center justify-center hover:bg-gray-100"
+                                            >
+                                                ▲
+                                            </button>
+
+                                            <button
+                                                type="button"
+                                                onClick={turmaAnterior}
+                                                className="h-5 flex items-center justify-center hover:bg-gray-100 border-t"
+                                            >
+                                                ▼
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <div className="flex gap-4 justify-end mt-6 pt-4 border-t border-gray-100">
-                                    <button 
-                                        type="button" 
+                                <div className="flex gap-4 justify-center mt-6 pt-4 border-t border-gray-100">
+                                    <button
+                                        type="button"
                                         onClick={closeModal}
                                         className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer"
                                     >
                                         Cancelar
                                     </button>
-                                    <button 
+                                    <button
                                         type="submit"
                                         className="px-6 py-2.5 bg-[#006414] hover:bg-green-800 text-white font-medium rounded shadow transition-colors cursor-pointer"
                                     >

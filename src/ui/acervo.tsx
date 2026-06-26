@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import "./App.css";
 
-// Interface atualizada de acordo com o seu Schema do Prisma
 interface CadastroLivroForm {
     titulo: string;
     autor: string;
@@ -19,11 +18,8 @@ type ModalStep = 'choice' | 'form' | 'import';
 export default function Acervo() {
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [modalStep, setModalStep] = useState<ModalStep>('choice');
-
-    // Array que guardará a lista de livros (já desmembrados unitariamente) prontos para o Prisma
     const [livrosParaImportar, setLivrosParaImportar] = useState<CadastroLivroForm[]>([]);
 
-    // Form manual simplificado (unidades aqui serve apenas para o usuário dizer quantos quer gerar)
     const [formData, setFormData] = useState({
         titulo: '',
         autor: '',
@@ -83,7 +79,6 @@ export default function Acervo() {
 
             const livrosDesmembrados: CadastroLivroForm[] = [];
 
-            // Varre cada linha da planilha
             jsonData.forEach((row) => {
                 const qtdPlanilha = Number(row.unidades || row.Unidades || row.unidade || row.Unidade || 1);
                 const quantidade = Math.max(1, qtdPlanilha);
@@ -169,7 +164,6 @@ export default function Acervo() {
                             &times;
                         </button>
 
-                        {/* PASSO 1: ESCOLHA */}
                         {modalStep === 'choice' && (
                             <div className="text-center py-6">
                                 <h2 className="text-3xl font-semibold text-gray-800 mb-8">Adicionar Novo Livro</h2>
@@ -190,7 +184,6 @@ export default function Acervo() {
                             </div>
                         )}
 
-                        {/* PASSO 2: FORMULÁRIO MANUAL */}
                         {modalStep === 'form' && (
                             <div>
                                 <h2 className="text-3xl font-semibold text-gray-800 mb-6 text-center">Cadastro de Livro</h2>
