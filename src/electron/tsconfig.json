@@ -5,6 +5,9 @@
         "module": "nodenext",
         "types": ["node"],
         "outDir": "../../dist-electron",
-        "skipLibCheck": true
+        "skipLibCheck": true,
+        "rootDir": "../..",
+        "allowImportingTsExtensions": true,
+        "rewriteRelativeImportExtensions": true
     }
 }
