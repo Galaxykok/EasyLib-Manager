@@ -21,7 +21,7 @@ app.on('ready', () => {
     mainWindow.loadFile(path.join(app.getAppPath(), '/dist-react/index.html'));
 });
 
-ipcMain.handle('cadastrar-aluno', async (_event, dadosAluno) => {
+ipcMain.handle('cadastrar-aluno', async (_event, dadosAluno: any) => {
     try {
         const novoAluno = await prisma.aluno.create({
             data: {
@@ -50,13 +50,16 @@ ipcMain.handle('obter-alunos', async () => {
     }
 });
 
-// ipcMain.handle('pesquisar-aluno', async (_event, dadoAluno) =>{
-//     try{
-//         const aluno = await prisma.aluno.findMany({
-//             where: { nome: dadoAluno.nome } 
-//         })
-//     }
-//     catch{
-
-//     }
-// });
+ipcMain.handle('pesquisar-aluno', async (_event, dadoAluno: any) =>{
+    try{
+        const aluno = await prisma.aluno.findMany({
+            where: { 
+                nome: { contains: dadoAluno,} } 
+        })
+        return {success: true, data: aluno}
+    }
+    catch(error: any){
+        console.error("Erro no Prisma:", error);
+        return { success: false, error: error.message };
+    }
+});
