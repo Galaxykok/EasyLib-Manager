@@ -8,6 +8,7 @@ declare global {
     electronAPI: {
       cadastrarAluno: (dados: { nome: string; serie: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
       obterAlunos: () => Promise<{ success: boolean; data?: Aluno[]; error?: string }>;
+      pesquisarAluno: (nome: any) => Promise<{ success: boolean; data?: Aluno[]; error?: string }>
     };
   }
 }
@@ -27,21 +28,34 @@ export default function Alunos() {
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [alunosLista, setAlunosLista] = useState<Aluno[]>([]); 
     const [isLoading, setIsLoading] = useState<boolean>(true); 
+    const [aluno, setAluno] = useState("")
 
     const [formData, setFormData] = useState<CadastroAlunoForm>({
         nome: '',
         serie: ''
     });
 
+
     const carregarAlunos = async () => {
         setIsLoading(true);
-        const response = await window.electronAPI.obterAlunos();
-        if (response.success && response.data) {
-            setAlunosLista(response.data);
-        } else {
-            console.error("Erro ao carregar alunos:", response.error);
-        }
-        setIsLoading(false);
+        if(aluno !== ""){
+            const response = await window.electronAPI.pesquisarAluno(aluno);
+            if (response.success && response.data) {
+                setAlunosLista(response.data);
+            } else {
+                console.error("Erro ao carregar alunos:", response.error);
+            }
+            setIsLoading(false);
+        }else{
+            const response = await window.electronAPI.obterAlunos();
+            if (response.success && response.data) {
+                setAlunosLista(response.data);
+            } else {
+                console.error("Erro ao carregar alunos:", response.error);
+            }
+            setIsLoading(false);     
+    }
+
     };
 
     useEffect(() => {
@@ -145,11 +159,24 @@ export default function Alunos() {
                     </div>
                     
                     <div className="w-full flex items-center justify-between mt-6">
-                        <input
-                            type="text"
-                            placeholder="Pesquisar aluno..."
-                            className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                        />
+                        <div className="flex items-center gap-2">
+                            <input
+                                id="pesquisarAluno"
+                                type="text"
+                                placeholder="Pesquisar aluno..."
+                                className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                value={aluno}
+                                onChange={(e) => setAluno(e.target.value)}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => {carregarAlunos()}}
+                                className="flex items-center justify-center bg-[#006414] hover:bg-green-800 text-white p-3.5 rounded-md shadow transition-colors cursor-pointer"
+                                title="Pesquisar"
+                            >
+                                Pesquisar
+                            </button>
+                        </div>
 
                         <button
                             onClick={() => setIsModalOpen(true)}
