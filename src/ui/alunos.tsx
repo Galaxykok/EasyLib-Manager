@@ -3,21 +3,6 @@ import type { FormEvent } from 'react';
 import { Link } from "react-router-dom";
 import "./App.css";
 
-declare global {
-  interface Window {
-    electronAPI: {
-      cadastrarAluno: (dados: { nome: string; serie: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
-      obterAlunos: () => Promise<{ success: boolean; data?: Aluno[]; error?: string }>;
-      pesquisarAluno: (nome: any) => Promise<{ success: boolean; data?: Aluno[]; error?: string }>
-    };
-  }
-}
-
-interface Aluno {
-    id: number;
-    nome: string;
-    serie: string;
-}
 
 interface CadastroAlunoForm {
     nome: string;

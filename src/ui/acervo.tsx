@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
 import { Link } from "react-router-dom";
 import * as XLSX from 'xlsx';
 import "./App.css";
+
 
 interface CadastroLivroForm {
     titulo: string;
@@ -19,6 +20,11 @@ export default function Acervo() {
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
     const [modalStep, setModalStep] = useState<ModalStep>('choice');
     const [livrosParaImportar, setLivrosParaImportar] = useState<CadastroLivroForm[]>([]);
+    const [livroLista, setLivroLista] = useState<Livro[]>([]); 
+    const [isLoading, setIsLoading] = useState<boolean>(true);
+    const [livro, setLivro] = useState("")
+
+
 
     const [formData, setFormData] = useState({
         titulo: '',
@@ -41,24 +47,60 @@ export default function Acervo() {
         setFormData(prev => ({ ...prev, [name]: value }));
     };
 
-    const handleCadastroSubmit = (e: FormEvent<HTMLFormElement>): void => {
+    const carregarLivros = async () => {
+        setIsLoading(true);
+        if(livro !== ""){
+            const response = await window.electronAPI.pesquisarLivro(livro);
+            if (response.success && response.data) {
+                setLivroLista(response.data);
+            } else {
+                console.error("Erro ao carregar livros:", response.error);
+            }
+            setIsLoading(false);
+        }else{
+            const response = await window.electronAPI.obterLivros();
+            if (response.success && response.data) {
+                setLivroLista(response.data);
+            } else {
+                console.error("Erro ao carregar livros:", response.error);
+            }
+            setIsLoading(false);     
+    }
+
+    };
+
+    useEffect(() => {
+        carregarLivros();
+    }, []);
+
+    const handleCadastroSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
         const quantidade = Math.max(1, Number(formData.unidades || 1));
-        const novosLivros: CadastroLivroForm[] = [];
+        const novoLivro: CadastroLivroForm[] = [];
 
-        for (let i = 0; i < quantidade; i++) {
-            novosLivros.push({
+        for (let i = 1; i <= quantidade; i++) {
+            novoLivro.push({
                 titulo: formData.titulo,
                 autor: formData.autor,
                 isbn: formData.isbn || null,
                 numeroEdicao: formData.numeroEdicao ? Number(formData.numeroEdicao) : null,
                 editora: formData.editora || null,
-                unidade: i+1
+                unidade: i
             });
         }
+        const response = await window.electronAPI.cadastrarLivro(novoLivro);
 
-        console.log(`Cadastrando ${quantidade} unidades individuais manualmente no Prisma:`, novosLivros);
+
+        if (response.success) {
+            console.log("Aluno cadastrado com sucesso no banco local:", response.data);
+            closeModal();
+            carregarLivros();
+        } else {
+            console.error("Erro ao salvar:", response.error);
+            alert("Erro ao cadastrar livro no banco de dados.");
+        }
+        console.log(`Cadastrando ${quantidade} unidades individuais manualmente no Prisma:`, novoLivro);
         closeModal();
     };
 
@@ -83,14 +125,14 @@ export default function Acervo() {
                 const qtdPlanilha = Number(row.unidades || row.Unidades || row.unidade || row.Unidade || 1);
                 const quantidade = Math.max(1, qtdPlanilha);
 
-                for (let i = 0; i < quantidade; i++) {
+                for (let i = 1; i <= quantidade; i++) {
                     livrosDesmembrados.push({
                         titulo: String(row.titulo || row.Titulo || row.nome || row.Nome || ''),
                         autor: String(row.autor || row.Autor || ''),
                         isbn: row.isbn || row.ISBN ? String(row.isbn || row.ISBN) : null,
                         numeroEdicao: row.numeroEdicao || row.edicao || row.Edição ? Number(row.numeroEdicao || row.edicao || row.Edição) : null,
                         editora: row.editora || row.Editora ? String(row.editora || row.Editora) : null,
-                        unidade: i + 1
+                        unidade: i
                     });
                 }
             });
@@ -136,22 +178,83 @@ export default function Acervo() {
                             Acervo
                         </h1>
                         <div className="w-full bg-[#DCE2F4] border border-gray-600 rounded-md p-6 h-[60vh] flex flex-col gap-4 overflow-auto shadow-sm">
-                            {/* Lista do acervo */}
+                            {isLoading ? (
+                                <div className="text-center text-gray-600 text-xl m-auto">
+                                    Carregando livros...
+                                </div>
+                                ) : livroLista.length === 0 ? (
+                                <div className="text-center text-gray-500 text-xl m-auto">
+                                    Nenhum livro cadastrado.
+                                </div>
+                                ) : (
+                                <div className="flex flex-col gap-2">
+                                    {livroLista.map((livro) => (
+                                        <div
+                                            key={livro.id}
+                                            className="flex justify-between items-center bg-white border border-gray-300 p-4 rounded shadow-sm hover:border-gray-400 transition-all"
+                                        >
+                                            <span className="text-xl font-medium text-cyan-500">
+                                                {livro.id}
+                                            </span>
+
+                                            <div className="flex flex-col flex-1 mx-4">
+                                                <span className="text-xl font-medium text-gray-800">
+                                                    {livro.titulo}
+                                                </span>
+                                                <span className="text-sm text-gray-500">
+                                                    {livro.autor}
+                                                </span>
+                                            </div>
+
+                                            <div className="flex flex-col items-end gap-1">
+                                                {livro.numeroEdicao && (
+                                                    <span className="bg-cyan-100 text-cyan-800 font-semibold px-3 py-1 rounded-full text-sm">
+                                                        {livro.numeroEdicao}ª Edição
+                                                    </span>
+                                                )}
+
+                                                {livro.editora && (
+                                                    <span className="text-sm text-gray-500">
+                                                        {livro.editora}
+                                                    </span>
+                                                )}
+
+                                                {livro.isbn && (
+                                                    <span className="text-sm text-gray-500">
+                                                        ISBN: {livro.isbn}
+                                                    </span>
+                                                )}
+
+                                                <span className="text-sm text-gray-400">
+                                                    Unidade: {livro.unidade}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                                )}
                         </div>
                     </div>
-
-                    <div className="w-full flex items-center justify-between mt-6">
-                        <input
-                            type="text"
-                            placeholder="Pesquisar livro..."
-                            className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                        />
-                        <button
-                            onClick={() => setIsModalOpen(true)}
-                            className="flex items-center gap-2 bg-[#006414] hover:bg-green-800 text-white font-normal text-lg px-6 py-3 rounded shadow transition-colors cursor-pointer"
-                        >
-                            <span>+ Cadastrar Livro</span>
-                        </button>
+                    <div className="w-full flex items-center justify-between mt-6">            
+                        <div className="flex items-center gap-2">
+                            <input
+                                type="text"
+                                placeholder="Pesquisar livro..."
+                                value={livro}
+                                className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                onChange={(e) => {setLivro(e.target.value)}}
+                            />
+                            <button
+                                    type="button"
+                                    onClick={() => {carregarLivros()}}
+                                    className="flex items-center justify-center bg-[#006414] hover:bg-green-800 text-white p-3.5 rounded-md shadow transition-colors cursor-pointer"
+                                    title="Pesquisar">Pesquisar</button>
+                            <button
+                                onClick={() => setIsModalOpen(true)}
+                                className="flex items-center gap-2 bg-[#006414] hover:bg-green-800 text-white font-normal text-lg px-6 py-3 rounded shadow transition-colors cursor-pointer">
+                                <span>+ Cadastrar Livro</span>
+                            </button>
+                        </div>
                     </div>
                 </div>
             </main>
