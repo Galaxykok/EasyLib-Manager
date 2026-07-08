@@ -105,8 +105,8 @@ ipcMain.handle('cadastrar-um-livro', async (_event, livro: any ) => {
                     unidade: livro[unidade].unidade,
                 }
             });
-            return { success: true, data: novoLivro };
         }
+        return { success: true, data: livro };
         }
         catch(error: any){
             console.error("Erro no Prisma:", error);
