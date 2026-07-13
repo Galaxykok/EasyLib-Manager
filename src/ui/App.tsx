@@ -8,12 +8,14 @@ import Alunos from "./alunos.tsx";
 declare global{
   interface Window {
       electronAPI: {
-          cadastrarAluno: (dados: { nome: string; serie: string }) => Promise<{ success: boolean; data?: any; error?: string }>;
-          obterAlunos: () => Promise<{ success: boolean; data?: Aluno[]; error?: string }>;
-          pesquisarAluno: (nome: any) => Promise<{ success: boolean; data?: Aluno[]; error?: string }>
-          cadastrarLivro: (dados: any) => Promise<{ success: boolean; data?: any; error?: string }>;
           obterLivros: () => Promise<{ success: boolean; data?: Livro[]; error?: string }>;
+          obterAlunos: () => Promise<{ success: boolean; data?: Aluno[]; error?: string }>;
+          cadastrarAluno: (dados: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+          cadastrarLivro: (dados: any) => Promise<{ success: boolean; data?: any; error?: string }>;
+          pesquisarAluno: (nome: any) => Promise<{ success: boolean; data?: Aluno[]; error?: string }>
           pesquisarLivro: (nome: any) => Promise<{ success: boolean; data?: Livro[]; error?: string }>
+          deleteAluno: (dado: any) => Promise<{success: boolean; data?: any; error?: string}>
+          deleteLivro: (dado: any) => Promise<{success: boolean; data?: any; error?: string}>
       };
   }
   interface Aluno {

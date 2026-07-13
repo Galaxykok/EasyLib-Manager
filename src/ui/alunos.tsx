@@ -1,8 +1,13 @@
-import { useState, useEffect } from 'react'; // Adicionado useEffect
+import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
 import { Link } from "react-router-dom";
 import "./App.css";
 
+interface Aluno {
+    id: number;
+    nome: string;
+    serie: string;
+}
 
 interface CadastroAlunoForm {
     nome: string;
@@ -11,15 +16,27 @@ interface CadastroAlunoForm {
 
 export default function Alunos() {
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+    const [selectedAluno, setSelectedAluno] = useState<Aluno | null>(null); 
     const [alunosLista, setAlunosLista] = useState<Aluno[]>([]); 
     const [isLoading, setIsLoading] = useState<boolean>(true); 
-    const [aluno, setAluno] = useState("")
+    const [aluno, setAluno] = useState("");
 
     const [formData, setFormData] = useState<CadastroAlunoForm>({
         nome: '',
         serie: ''
     });
 
+    const deleteAluno = async () => {
+        const response = await window.electronAPI.deleteAluno(selectedAluno)
+
+        if(response.success && response.data){
+            closeDetailsModal()
+            carregarAlunos()
+        } else{
+            alert("Erro ao excluir aluno:")
+            console.log(response.error)
+        }
+    }
 
     const carregarAlunos = async () => {
         setIsLoading(true);
@@ -39,8 +56,7 @@ export default function Alunos() {
                 console.error("Erro ao carregar alunos:", response.error);
             }
             setIsLoading(false);     
-    }
-
+        }
     };
 
     useEffect(() => {
@@ -50,6 +66,10 @@ export default function Alunos() {
     const closeModal = (): void => {
         setIsModalOpen(false);
         setFormData({ nome: '', serie: '' });
+    };
+
+    const closeDetailsModal = (): void => {
+        setSelectedAluno(null);
     };
 
     const handleInputChange = (
@@ -129,7 +149,8 @@ export default function Alunos() {
                                     {alunosLista.map((aluno) => (
                                         <div 
                                             key={aluno.id} 
-                                            className="flex justify-between items-center bg-white border border-gray-300 p-4 rounded shadow-sm hover:border-gray-400 transition-all"
+                                            onClick={() => setSelectedAluno(aluno)}
+                                            className="flex justify-between items-center bg-white border border-gray-300 p-4 rounded shadow-sm hover:border-cyan-500 hover:shadow-md transition-all cursor-pointer"
                                         >
                                             <span className='text-xl font-medium text-cyan-500 rounded-full'>{aluno.id}</span>
                                             <span className="text-xl font-medium text-gray-800">{aluno.nome}</span>
@@ -208,6 +229,39 @@ export default function Alunos() {
                                     <button type="submit" className="px-6 py-2.5 bg-[#006414] hover:bg-green-800 text-white font-medium rounded shadow transition-colors cursor-pointer">Cadastrar Aluno</button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {selectedAluno && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
+                    <div className="bg-white rounded-lg p-8 w-full max-w-md shadow-2xl border border-gray-200 relative">
+                        <div>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Informações do Registro</h2>
+                            
+                            <div className="space-y-4 mb-8 bg-gray-50 p-4 rounded-md border border-gray-200">
+                                <p className="text-base text-gray-700"><strong>ID:</strong> {selectedAluno.id}</p>
+                                <p className="text-base text-gray-700"><strong>Nome:</strong> {selectedAluno.nome}</p>
+                                <p className="text-base text-gray-700"><strong>Série / Turma:</strong> {selectedAluno.serie}</p>
+                            </div>
+
+                            <div className="flex justify-between items-center pt-4 border-t border-gray-100">
+                                <button 
+                                    type="button" 
+                                    className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded shadow transition-colors cursor-pointer"
+                                    onClick={() => deleteAluno()}
+                                >
+                                    Excluir Aluno
+                                </button>
+                                <button 
+                                    type="button" 
+                                    onClick={closeDetailsModal} 
+                                    className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer"
+                                >
+                                    Fechar
+                                </button>
+                            </div>
                         </div>
                     </div>
                 </div>
