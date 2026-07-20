@@ -131,6 +131,18 @@ ipcMain.handle("delete-livro", async (_event, livro: any) => {
     }
 });
 
+ipcMain.handle("delete-emprestimo", async (_event, dado: any) => {
+    try {
+        const emprestimoAExcluir = await prisma.emprestimo.delete({
+            where: { id: dado.id },
+        });
+        return { success: true, data: emprestimoAExcluir };
+    } catch (error: any) {
+        console.error("Erro no Prisma:", error);
+        return { success: false, error: error.message };
+    }
+});
+
 ipcMain.handle("delete-aluno", async (_event, aluno: any) => {
     try {
         const alunoAExcluir = await prisma.aluno.delete({
@@ -141,6 +153,92 @@ ipcMain.handle("delete-aluno", async (_event, aluno: any) => {
         return { success: true, data: alunoAExcluir };
     } catch (error: any) {
         console.error("Erro no Prisma:", error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle("cadastrar-emprestimo", async (_event, dados: any) => {
+    try {
+        const novoEmprestimo = await prisma.emprestimo.create({
+            data: {
+                alunoId: dados.aluno,
+                livroId: dados.livro,
+                dataDevolucaoPrevista: dados.dataDevolucaoPrevista,
+            },
+        });
+        return { success: true, data: novoEmprestimo };
+    } catch (error: any) {
+        console.log("Erro no prisma: ", error.message);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle("obter-emprestimo", async (_event) => {
+    try {
+        await prisma.emprestimo.updateMany({
+            where: {
+                status: "ATIVO",
+                dataDevolucaoPrevista: {
+                    not: null,
+                    lt: new Date(),
+                },
+            },
+            data: {
+                status: "ATRASADO",
+            },
+        });
+        const emprestimos = await prisma.emprestimo.findMany({
+            include: {
+                aluno: true,
+                livro: true,
+            },
+        });
+        return { success: true, data: emprestimos };
+    } catch (error: any) {
+        console.error("Erro no Prisma:", error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle("pesquisar-emprestimos", async (_event, dados) => {
+    try {
+        const emprestimo = await prisma.emprestimo.findMany({
+            where: {
+                aluno: dados.aluno
+                    ? {
+                          nome: {
+                              contains: dados.aluno,
+                          },
+                      }
+                    : undefined,
+
+                livro: dados.livro
+                    ? {
+                          titulo: {
+                              contains: dados.livro,
+                          },
+                      }
+                    : undefined,
+            },
+            include: {
+                aluno: true,
+                livro: true,
+            },
+        });
+        return { success: true, data: emprestimo };
+    } catch (error: any) {
+        return { success: false, error: error.message };
+    }
+});
+ipcMain.handle("confirmar-devolucao", async (_event, dado: any) => {
+    try {
+        const livroDevolvido = await prisma.emprestimo.update({
+            where: { id: dado.id },
+            data: { status: "DEVOLVIDO" },
+        });
+        return { success: true, data: livroDevolvido };
+    } catch (error: any) {
+        console.error("Erro no Prisma: ", error);
         return { success: false, error: error.message };
     }
 });

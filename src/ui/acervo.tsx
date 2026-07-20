@@ -13,11 +13,6 @@ interface CadastroLivroForm {
     unidade: number;
 }
 
-interface Livro extends Omit<CadastroLivroForm, "unidade"> {
-    id: number | string;
-    unidade: number;
-}
-
 type ModalStep = "choice" | "form" | "import";
 
 export default function Acervo() {
@@ -29,6 +24,7 @@ export default function Acervo() {
     const [livroLista, setLivroLista] = useState<Livro[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [livro, setLivro] = useState("");
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
 
     const [selectedLivro, setSelectedLivro] = useState<Livro | null>(null);
 
@@ -57,9 +53,7 @@ export default function Acervo() {
 
     const deleteLivro = async () => {
         const response = await window.electronAPI.deleteLivro(selectedLivro);
-
         if (response.success && response.data) {
-            closeDetailsModal();
             carregarLivros();
         } else {
             alert("Erro ao excluir aluno:");
@@ -656,7 +650,7 @@ export default function Acervo() {
                             <button
                                 type="button"
                                 className="px-6 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded shadow transition-colors cursor-pointer"
-                                onClick={() => deleteLivro()}
+                                onClick={() => setShowDeleteModal(true)}
                             >
                                 Excluir Livro
                             </button>
@@ -666,6 +660,39 @@ export default function Acervo() {
                                 className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer"
                             >
                                 Fechar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                        <h2 className="text-2xl font-semibold text-red-600 mb-4">
+                            Confirmar exclusão
+                        </h2>
+
+                        <p className="text-gray-600 mb-6">
+                            Tem certeza que deseja deletar este empréstimo?
+                        </p>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowDeleteModal(false)}
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+                            >
+                                Cancelar
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    deleteLivro();
+                                    setShowDeleteModal(false);
+                                    closeDetailsModal();
+                                }}
+                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded"
+                            >
+                                Deletar
                             </button>
                         </div>
                     </div>

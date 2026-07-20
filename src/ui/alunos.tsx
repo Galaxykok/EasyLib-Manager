@@ -20,6 +20,7 @@ export default function Alunos() {
     const [alunosLista, setAlunosLista] = useState<Aluno[]>([]); 
     const [isLoading, setIsLoading] = useState<boolean>(true); 
     const [aluno, setAluno] = useState("");
+    const [showDeleteModal, setShowDeleteModal] = useState(false);
 
     const [formData, setFormData] = useState<CadastroAlunoForm>({
         nome: '',
@@ -250,7 +251,7 @@ export default function Alunos() {
                                 <button 
                                     type="button" 
                                     className="px-5 py-2.5 bg-red-600 hover:bg-red-700 text-white font-medium rounded shadow transition-colors cursor-pointer"
-                                    onClick={() => deleteAluno()}
+                                    onClick={() => setShowDeleteModal(true)}
                                 >
                                     Excluir Aluno
                                 </button>
@@ -262,6 +263,39 @@ export default function Alunos() {
                                     Fechar
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+            {showDeleteModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
+                    <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                        <h2 className="text-2xl font-semibold text-red-600 mb-4">
+                            Confirmar exclusão
+                        </h2>
+
+                        <p className="text-gray-600 mb-6">
+                            Tem certeza que deseja deletar este empréstimo?
+                        </p>
+
+                        <div className="flex justify-end gap-3">
+                            <button
+                                onClick={() => setShowDeleteModal(false)}
+                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
+                            >
+                                Cancelar
+                            </button>
+
+                            <button
+                                onClick={() => {
+                                    deleteAluno();
+                                    setShowDeleteModal(false);
+                                    closeDetailsModal();
+                                }}
+                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded"
+                            >
+                                Deletar
+                            </button>
                         </div>
                     </div>
                 </div>
