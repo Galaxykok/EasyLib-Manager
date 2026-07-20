@@ -98,7 +98,7 @@ ipcMain.handle("pesquisar-livro", async (_event, nomeLivro: any) => {
 
 ipcMain.handle("cadastrar-um-livro", async (_event, livro: any) => {
     try {
-        let result: any;
+        const result = [];
         for (let unidade = 0; unidade < livro.length; unidade++) {
             const novoLivro = await prisma.livro.create({
                 data: {

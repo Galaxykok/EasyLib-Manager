@@ -31,4 +31,5 @@ dist-electron
 
 /generated/prisma
 /lib/dev.db
+/prisma/migrations
 
