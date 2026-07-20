@@ -3,6 +3,7 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import "./App.css";
+import { StatusLivro } from "@prisma/client";
 
 interface CadastroLivroForm {
     titulo: string;
@@ -12,6 +13,11 @@ interface CadastroLivroForm {
     editora?: string | null;
     unidade: number;
 }
+
+const statusStyles: Record<StatusLivro, string> = {
+    [StatusLivro.LIVRE]: "bg-blue-100 text-green-800",
+    [StatusLivro.EMPRESTADO]: "bg-red-100 text-red-800",
+};
 
 type ModalStep = "choice" | "form" | "import";
 
@@ -317,6 +323,11 @@ export default function Acervo() {
 
                                                 <span className="text-sm text-gray-400">
                                                     Unidade: {livroItem.unidade}
+                                                </span>
+
+                                                <span
+                                                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                                        statusStyles[livroItem.status]}`}>{livroItem.status}
                                                 </span>
                                             </div>
                                         </div>

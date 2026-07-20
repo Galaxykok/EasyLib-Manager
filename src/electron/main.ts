@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
 import { prisma } from "../../lib/prisma.ts";
 import { StatusEmprestimo } from "@prisma/client";
+import { StatusLivro } from "@prisma/client";
 
 app.on("ready", () => {
     const mainWindow = new BrowserWindow({
@@ -160,14 +161,11 @@ ipcMain.handle("delete-aluno", async (_event, aluno: any) => {
 
 ipcMain.handle("cadastrar-emprestimo", async (_event, dados: any) => {
     try {
-        const emprestimoExistente = await prisma.emprestimo.findFirst({
+        const emprestimoExistente = await prisma.livro.findFirst({
             where: {
-                livroId: dados.livro,
-                status: {
-                    in: [StatusEmprestimo.ATIVO,
-                StatusEmprestimo.ATRASADO,],
-                },
-            },
+                id: dados.livro,
+                status: StatusLivro.EMPRESTADO
+            }
         });
 
         if (emprestimoExistente) {
@@ -182,6 +180,14 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: any) => {
                 alunoId: dados.aluno,
                 livroId: dados.livro,
                 dataDevolucaoPrevista: dados.dataDevolucaoPrevista,
+            },
+        });
+        await prisma.livro.update({
+            where: {
+                id: dados.livro,
+            },
+            data: {
+                status: StatusLivro.EMPRESTADO,
             },
         });
 
@@ -235,7 +241,6 @@ ipcMain.handle("pesquisar-emprestimos", async (_event, dados) => {
                           },
                       }
                     : undefined,
-
                 livro: dados.livro
                     ? {
                           titulo: {
@@ -258,8 +263,17 @@ ipcMain.handle("confirmar-devolucao", async (_event, dado: any) => {
     try {
         const livroDevolvido = await prisma.emprestimo.update({
             where: { id: dado.id },
-            data: { status: "DEVOLVIDO" },
+            data: { status: StatusEmprestimo.DEVOLVIDO,},
         });
+        await prisma.livro.update({
+            where: {
+                id: dado.livroId,
+            },
+            data: {
+                status: StatusLivro.LIVRE,
+            },
+        });
+
         return { success: true, data: livroDevolvido };
     } catch (error: any) {
         console.error("Erro no Prisma: ", error);

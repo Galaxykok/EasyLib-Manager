@@ -129,7 +129,7 @@ export default function Home() {
                                         })
                                         .filter(
                                             (emprestimo) =>
-                                                emprestimo.diffDias < 3,
+                                                emprestimo.diffDias < 3 && emprestimo.status !== "DEVOLVIDO",
                                         )
                                         .map((emprestimo) => {
                                             const corCirculo =

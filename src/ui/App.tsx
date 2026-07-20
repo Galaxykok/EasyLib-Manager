@@ -4,6 +4,8 @@ import Acervo from "./acervo.tsx";
 import Emprestimos from "./emprestimos.tsx";
 import Alunos from "./alunos.tsx";
 import { StatusEmprestimo } from "./enum.ts";
+import { StatusLivro } from "./enum.ts";
+
 declare global {
     interface Window {
         electronAPI: {
@@ -63,6 +65,7 @@ declare global {
         isbn?: string | null;
         editora?: string | null;
         unidade: number;
+        status: StatusLivro
     }
     interface Emprestimo {
         id: number;

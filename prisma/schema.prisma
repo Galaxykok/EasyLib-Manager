@@ -29,6 +29,7 @@ model Livro {
   isbn         String?
   editora      String?
   unidade      Int          @default(1)
+  status       StatusLivro  @default(LIVRE)
 
   emprestimos  Emprestimo[]
 
@@ -53,4 +54,9 @@ enum StatusEmprestimo {
   ATIVO
   DEVOLVIDO
   ATRASADO
+}
+
+enum StatusLivro{
+  LIVRE
+  EMPRESTADO
 }
