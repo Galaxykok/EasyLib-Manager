@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import path from "path";
 import { prisma } from "../../lib/prisma.ts";
+import { StatusEmprestimo } from "@prisma/client";
 
 app.on("ready", () => {
     const mainWindow = new BrowserWindow({
@@ -159,6 +160,23 @@ ipcMain.handle("delete-aluno", async (_event, aluno: any) => {
 
 ipcMain.handle("cadastrar-emprestimo", async (_event, dados: any) => {
     try {
+        const emprestimoExistente = await prisma.emprestimo.findFirst({
+            where: {
+                livroId: dados.livro,
+                status: {
+                    in: [StatusEmprestimo.ATIVO,
+                StatusEmprestimo.ATRASADO,],
+                },
+            },
+        });
+
+        if (emprestimoExistente) {
+            return {
+                success: false,
+                error: "Este livro já está emprestado.",
+            };
+        }
+
         const novoEmprestimo = await prisma.emprestimo.create({
             data: {
                 alunoId: dados.aluno,
@@ -166,10 +184,16 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: any) => {
                 dataDevolucaoPrevista: dados.dataDevolucaoPrevista,
             },
         });
-        return { success: true, data: novoEmprestimo };
+
+        return {
+            success: true,
+            data: novoEmprestimo,
+        };
     } catch (error: any) {
-        console.log("Erro no prisma: ", error.message);
-        return { success: false, error: error.message };
+        return {
+            success: false,
+            error: error.message,
+        };
     }
 });
 
