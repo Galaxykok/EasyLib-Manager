@@ -424,13 +424,13 @@ export default function Emprestimos() {
                             </button>
 
                             <div className="flex gap-3">
-                                <button
+                                {selectedEmprestimo.status !== "DEVOLVIDO" && (<button
                                     type="button"
                                     onClick={() => setShowReturnModal(true)}
                                     className="px-5 py-2.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded transition-colors cursor-pointer"
                                 >
                                     Devolver Livro
-                                </button>
+                                </button>)}
                                 <button
                                     type="button"
                                     onClick={closeDetailsModal}
