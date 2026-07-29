@@ -78,6 +78,19 @@ export default function Home() {
                     >
                         <span>Alunos</span>
                     </Link>
+
+                    <Link
+                        to="/exportacao"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Exportação de dados</span>
+                    </Link>
+                    <Link
+                        to="/debug"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Debug</span>
+                    </Link>
                 </nav>
             </aside>
 
@@ -114,13 +127,13 @@ export default function Home() {
                                     {emprestimoLista
                                         .map((emprestimo) => {
                                             const hoje = new Date();
-                                            const dataPrevista = new Date(
-                                                emprestimo.dataDevolucaoPrevista,
-                                            );
+                                            const dataPrevista = emprestimo.dataDevolucaoPrevista
+                                                ? new Date(emprestimo.dataDevolucaoPrevista)
+                                                : null;
 
-                                            const diffDias = Math.ceil(
-                                                (dataPrevista.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24),
-                                            );
+                                            const diffDias = dataPrevista
+                                                ? Math.ceil((dataPrevista.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
+                                                : Number.POSITIVE_INFINITY;
 
                                             return {
                                                 ...emprestimo,
@@ -166,9 +179,9 @@ export default function Home() {
                                                     <div className="flex items-center gap-4">
                                                         <div className="flex flex-col items-end gap-2">
                                                             <span className="bg-cyan-100 text-cyan-800 font-semibold px-3 py-1 rounded-full text-sm">
-                                                                {emprestimo.dataDevolucaoPrevista.toLocaleDateString(
-                                                                    "pt-BR",
-                                                                )}
+                                                                {emprestimo.dataDevolucaoPrevista
+                                                                    ? new Date(emprestimo.dataDevolucaoPrevista).toLocaleDateString("pt-BR")
+                                                                    : "Sem prazo"}
                                                             </span>
 
                                                             <span
@@ -258,9 +271,9 @@ export default function Home() {
                                 </span>
 
                                 <span>
-                                    {new Date(
-                                        selectedEmprestimo.dataDevolucaoPrevista,
-                                    ).toLocaleDateString("pt-BR")}
+                                    {selectedEmprestimo.dataDevolucaoPrevista
+                                        ? new Date(selectedEmprestimo.dataDevolucaoPrevista).toLocaleDateString("pt-BR")
+                                        : "Sem prazo"}
                                 </span>
                             </div>
                         </div>

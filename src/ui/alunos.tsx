@@ -129,6 +129,18 @@ export default function Alunos() {
                         <span className="w-6 h-6 bg-cyan-400 block" />
                         <span>Alunos</span>
                     </Link>
+                    <Link
+                        to="/exportacao"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Exportação de dados</span>
+                    </Link>
+                    <Link
+                        to="/debug"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Debug</span>
+                    </Link>
                 </nav>
             </aside>
 

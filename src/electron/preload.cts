@@ -14,4 +14,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteLivro: (dado: any) => ipcRenderer.invoke("delete-livro", dado),
     deleteEmprestimo: (dado: any) => ipcRenderer.invoke("delete-emprestimo", dado),
     confirmarDevolucao: (dado: any) => ipcRenderer.invoke("confirmar-devolucao", dado),
+    obterExportacao: (inicio?: string, fim?: string) => ipcRenderer.invoke("obter-exportacao", inicio, fim),
+    registrarDebug: (origem: string, mensagem: string, detalhes?: string) => ipcRenderer.invoke("registrar-debug", origem, mensagem, detalhes),
+    obterLogsDebug: () => ipcRenderer.invoke("obter-logs-debug"),
+    limparLogsDebug: () => ipcRenderer.invoke("limpar-logs-debug"),
+    copiarLogsDebug: () => ipcRenderer.invoke("copiar-logs-debug"),
+    limparDados: (tipo: "movimentacoes" | "emprestimos" | "alunos" | "acervo") => ipcRenderer.invoke("limpar-dados", tipo),
 });

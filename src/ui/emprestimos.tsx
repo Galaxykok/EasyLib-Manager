@@ -1,514 +1,301 @@
-import { useState, useEffect } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import "./App.css";
-import { StatusEmprestimo } from "./enum.ts";
 
-interface CadastroEmprestimoForm {
-    alunoId: string;
-    livroId: string;
-    dataDevolucaoPrevista: "";
-}
-
-const statusStyles: Record<StatusEmprestimo, string> = {
-    [StatusEmprestimo.ATIVO]: "bg-blue-100 text-green-800",
-    [StatusEmprestimo.DEVOLVIDO]: "bg-green-100 text-blue-800",
-    [StatusEmprestimo.ATRASADO]: "bg-red-100 text-red-800",
-};
+const formatarData = (valor: Date | string | null | undefined) =>
+    valor ? new Date(valor).toLocaleDateString("pt-BR") : "Sem prazo";
 
 export default function Emprestimos() {
-    const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
-    const [emprestimoLista, setEmprestimoLista] = useState<Emprestimo[]>([]);
-    const [aluno, setAluno] = useState("");
-    const [livro, setLivro] = useState("");
-    const [selectedEmprestimo, setSelectedEmprestimo] =
-        useState<Emprestimo | null>(null);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [showDeleteModal, setShowDeleteModal] = useState(false);
-    const [showReturnModal, setShowReturnModal] = useState(false);
+    const [lista, setLista] = useState<Emprestimo[]>([]);
+    const [livros, setLivros] = useState<Livro[]>([]);
+    const [nome, setNome] = useState("");
+    const [serie, setSerie] = useState("");
+    const [tipo, setTipo] = useState<"ALUNO" | "PROFESSOR">("ALUNO");
+    const [leitorId, setLeitorId] = useState<number | undefined>();
+    const [sugestoes, setSugestoes] = useState<Aluno[]>([]);
+    const [selecionados, setSelecionados] = useState<number[]>([]);
+    const [prazo, setPrazo] = useState("");
+    const [busca, setBusca] = useState("");
+    const [buscaEmprestimos, setBuscaEmprestimos] = useState("");
+    const [carregando, setCarregando] = useState(true);
+    const [salvando, setSalvando] = useState(false);
 
-    const [formData, setFormData] = useState<CadastroEmprestimoForm>({
-        alunoId: "",
-        livroId: "",
-        dataDevolucaoPrevista: "",
-    });
-
-    const closeModal = (): void => {
-        setIsModalOpen(false);
-        setFormData({ alunoId: "", livroId: "", dataDevolucaoPrevista: "" });
+    const carregar = async () => {
+        setCarregando(true);
+        const [emprestimos, acervo] = await Promise.all([
+            window.electronAPI.obterEmprestimo(),
+            window.electronAPI.obterLivros(),
+        ]);
+        if (emprestimos.success && emprestimos.data) setLista(emprestimos.data);
+        else if (!emprestimos.success) alert(`Erro ao carregar empréstimos: ${emprestimos.error}`);
+        if (acervo.success && acervo.data) setLivros(acervo.data);
+        else if (!acervo.success) alert(`Erro ao carregar o acervo: ${acervo.error}`);
+        setCarregando(false);
     };
-
-    const handleInputChange = async (e: ChangeEvent<HTMLInputElement>) => {
-        const { name, value } = e.target;
-        setFormData((prev) => ({ ...prev, [name]: value }));
-    };
-
-    const closeDetailsModal = (): void => {
-        setSelectedEmprestimo(null);
-    };
-
-    const carregarEmprestimos = async () => {
-        setIsLoading(true);
-        if (aluno !== "" || livro !== "") {
-            const response =
-                await window.electronAPI.pesquisarEmprestimos({aluno, livro});
-            if (response.success && response.data) {
-                setEmprestimoLista(response.data);
-            } else {
-                console.error("Erro ao carregar alunos:", response.error);
-            }
-            setIsLoading(false);
-        } else {
-            const response = await window.electronAPI.obterEmprestimo();
-            if (response.success && response.data) {
-                setEmprestimoLista(response.data);
-            } else {
-                console.error("Erro ao carregar alunos:", response.error);
-            }
-            setIsLoading(false);
-        }
-    };
-
-    const deleteEmprestimo = async () => {
-        const response =
-            await window.electronAPI.deleteEmprestimo(selectedEmprestimo);
-
-        if (response.success && response.data) {
-            carregarEmprestimos();
-        } else {
-            alert("Erro ao excluir aluno:");
-            console.log(response.error);
-        }
-    };
-
-    const confirmarDevolução = async () => {
-        const response = await window.electronAPI.confirmarDevolucao(selectedEmprestimo)
-        if (response.success && response.data){
-            carregarEmprestimos();
-        } else {
-            alert("Erro ao devolver livro no sistema")
-            console.log(response.error)
-        }
-    }
 
     useEffect(() => {
-        carregarEmprestimos();
+        carregar();
     }, []);
 
-    const handleCadastroSubmit = async (
-        e: FormEvent<HTMLFormElement>,
-    ): Promise<void> => {
-        e.preventDefault();
-
-        const dataConvertida = new Date(
-            `${formData.dataDevolucaoPrevista}T12:00:00`,
-        );
-
-        if (isNaN(dataConvertida.getTime()) || dataConvertida < new Date()) {
-            alert("Por favor, insira uma data de devolução válida.");
+    const procurarLeitor = async (valor: string) => {
+        setNome(valor);
+        setLeitorId(undefined);
+        if (valor.trim().length < 2) {
+            setSugestoes([]);
             return;
         }
+        const resposta = await window.electronAPI.pesquisarAluno(valor);
+        setSugestoes(resposta.data || []);
+    };
 
-        const dadosParaEnviar = {
-            aluno: Number(formData.alunoId),
-            livro: Number(formData.livroId),
-            dataDevolucaoPrevista: dataConvertida,
-        };
+    const selecionarLeitor = (leitor: Aluno) => {
+        setLeitorId(leitor.id);
+        setNome(leitor.nome);
+        setSerie(leitor.serie);
+        setTipo(leitor.tipo);
+        setSugestoes([]);
+    };
 
+    const salvar = async () => {
+        if (!nome.trim() || selecionados.length === 0 || salvando) return;
+        setSalvando(true);
         try {
-            const response =
-                await window.electronAPI.cadastrarEmprestimo(dadosParaEnviar);
-
-            if (response.success) {
-                console.log(
-                    "Empréstimo cadastrado com sucesso:",
-                    response.data,
-                );
-                closeModal();
-                carregarEmprestimos();
-            } else {
-                console.error("Erro ao salvar:", response.error);
-                alert("Erro ao cadastrar empréstimo no banco de dados.");
+            const resposta = await window.electronAPI.cadastrarEmprestimo({
+                leitor: { id: leitorId, nome, serie, tipo },
+                livros: selecionados,
+                dataDevolucaoPrevista: prazo || null,
+            });
+            if (!resposta.success) {
+                alert(`Erro ao registrar empréstimo: ${resposta.error}`);
+                return;
             }
-        } catch (error) {
-            console.error("Erro na comunicação com a API:", error);
-            alert("Erro interno ao processar o empréstimo.");
+            setNome("");
+            setSerie("");
+            setLeitorId(undefined);
+            setSelecionados([]);
+            setPrazo("");
+            setSugestoes([]);
+            await carregar();
+        } finally {
+            setSalvando(false);
         }
     };
 
+    const devolver = async (emprestimo: Emprestimo) => {
+        const resposta = await window.electronAPI.confirmarDevolucao(emprestimo);
+        if (!resposta.success) {
+            alert(`Erro ao devolver livro: ${resposta.error}`);
+            return;
+        }
+        await carregar();
+    };
+
+    const definirPrazo = (tipoPrazo: "7dias" | "15dias" | "1mes") => {
+        const data = new Date();
+        if (tipoPrazo === "1mes") {
+            const diaOriginal = data.getDate();
+            data.setDate(1);
+            data.setMonth(data.getMonth() + 1);
+            const ultimoDiaDoMes = new Date(
+                data.getFullYear(),
+                data.getMonth() + 1,
+                0,
+            ).getDate();
+            data.setDate(Math.min(diaOriginal, ultimoDiaDoMes));
+        } else {
+            data.setDate(data.getDate() + (tipoPrazo === "7dias" ? 7 : 15));
+        }
+        const ano = data.getFullYear();
+        const mes = String(data.getMonth() + 1).padStart(2, "0");
+        const dia = String(data.getDate()).padStart(2, "0");
+        setPrazo(`${ano}-${mes}-${dia}`);
+    };
+
+    const visiveis = livros.filter(
+        (livro) =>
+            `${livro.titulo} ${livro.autor} ${livro.isbn || ""}`
+                .toLowerCase()
+                .includes(busca.toLowerCase()),
+    );
+    const emprestimosVisiveis = lista.filter((emprestimo) =>
+        `${emprestimo.aluno.nome} ${emprestimo.aluno.serie} ${emprestimo.livro.titulo} ${emprestimo.livro.isbn || ""}`
+            .toLowerCase()
+            .includes(buscaEmprestimos.trim().toLowerCase()),
+    );
+
     return (
-        <div className="flex h-screen w-screen bg-white font-sans overflow-hidden relative">
-            <aside className="w-64 flex flex-col pt-16 relative bg-white flex-shrink-0">
-                <div className="absolute right-0 top-0 bottom-0 w-2 bg-gray-300" />
-                <nav className="flex flex-col gap-6 pl-6 z-10">
-                    <Link
-                        to="/"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Home</span>
-                    </Link>
-
-                    <Link
-                        to="/acervo"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Acervo</span>
-                    </Link>
-
-                    <Link
-                        to="/emprestimos"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer"
-                    >
-                        <span className="w-6 h-6 bg-cyan-400 block" />
-                        <span>Empréstimos</span>
-                    </Link>
-
-                    <Link
-                        to="/aluno"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Alunos</span>
-                    </Link>
+        <div className="flex min-h-screen bg-white">
+            <aside className="w-64 p-6 border-r-8 border-gray-300">
+                <nav className="flex flex-col gap-5 text-xl">
+                    <Link to="/">Home</Link>
+                    <Link to="/acervo">Acervo</Link>
+                    <Link className="font-semibold text-cyan-600" to="/emprestimos">Empréstimos</Link>
+                    <Link to="/aluno">Alunos</Link>
+                    <Link to="/exportacao">Exportação de dados</Link>
+                    <Link to="/debug">Debug</Link>
                 </nav>
             </aside>
 
-            <main className="flex-1 flex flex-col items-center pt-8 px-12 bg-white overflow-y-auto">
-                <div className="w-full max-w-7xl flex flex-col h-full justify-between pb-8">
-                    <div>
-                        <h1 className="text-7xl font-normal text-center text-black mb-8 tracking-wide">
-                            Empréstimos
-                        </h1>
-
-                        <div className="w-full bg-[#DCE2F4] border border-gray-600 rounded-md p-6 h-[60vh] flex flex-col gap-4 overflow-auto shadow-sm">
-                            {isLoading ? (
-                                <div className="text-center text-gray-600 text-xl m-auto">
-                                    Carregando empréstimos...
-                                </div>
-                            ) : emprestimoLista.length === 0 ? (
-                                <div className="text-center text-gray-500 text-xl m-auto">
-                                    Nenhum empréstimo encontrado.
-                                </div>
-                            ) : (
-                                <div className="flex flex-col gap-2">
-                                    {emprestimoLista.map((emprestimo) => {
-                                        return (
-                                            <div
-                                                key={emprestimo.id}
-                                                onClick={() =>
-                                                    setSelectedEmprestimo(
-                                                        emprestimo,
-                                                    )
-                                                }
-                                                className="flex justify-between items-center bg-white border border-gray-300 p-4 rounded shadow-sm hover:border-gray-400 transition-all cursor-pointer"
-                                            >
-                                                <div className="flex flex-col flex-1">
-                                                    <span className="text-xl font-medium text-gray-800">
-                                                        {emprestimo.aluno.nome}
-                                                    </span>
-
-                                                    <span className="text-sm text-gray-500">
-                                                        {
-                                                            emprestimo.livro
-                                                                .titulo
-                                                        }
-                                                    </span>
-                                                </div>
-                                                <div className="flex flex-col items-end gap-2">
-                                                    <span className="bg-cyan-100 text-cyan-800 font-semibold px-3 py-1 rounded-full text-sm">
-                                                        {new Date(
-                                                            emprestimo.dataDevolucaoPrevista,
-                                                        ).toLocaleDateString(
-                                                            "pt-BR",
-                                                        )}
-                                                    </span>
-
-                                                    <span
-                                                        className={`px-3 py-1 rounded-full ${statusStyles[emprestimo.status]}`}
-                                                    >
-                                                        {emprestimo.status}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )}
+            <main className="flex-1 p-8 max-w-6xl overflow-y-auto">
+                <h1 className="text-4xl font-semibold mb-6">Empréstimos</h1>
+                <section className="grid lg:grid-cols-2 gap-6 mb-10">
+                    <div className="p-5 rounded bg-slate-100">
+                        <h2 className="text-xl font-semibold mb-4">Novo empréstimo</h2>
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className="col-span-2">
+                                Nome do leitor
+                                <input
+                                    className="block w-full border rounded p-2 bg-white"
+                                    value={nome}
+                                    onChange={(evento) => procurarLeitor(evento.target.value)}
+                                />
+                            </label>
+                            <label>
+                                Tipo
+                                <select
+                                    className="block w-full border rounded p-2 bg-white"
+                                    value={tipo}
+                                    onChange={(evento) => setTipo(evento.target.value as "ALUNO" | "PROFESSOR")}
+                                >
+                                    <option value="ALUNO">Aluno</option>
+                                    <option value="PROFESSOR">Professor</option>
+                                </select>
+                            </label>
+                            <label>
+                                Turma / identificação
+                                <input
+                                    className="block w-full border rounded p-2 bg-white"
+                                    value={serie}
+                                    onChange={(evento) => setSerie(evento.target.value)}
+                                />
+                            </label>
+                            <label className="col-span-2">
+                                Data prevista (opcional)
+                                <input
+                                    className="block w-full border rounded p-2 bg-white"
+                                    type="date"
+                                    value={prazo}
+                                    onChange={(evento) => setPrazo(evento.target.value)}
+                                />
+                                <span className="flex flex-wrap gap-2 mt-2">
+                                    <button type="button" onClick={() => definirPrazo("7dias")} className="px-3 py-1 rounded bg-cyan-100 hover:bg-cyan-200 text-cyan-900 cursor-pointer">1 semana</button>
+                                    <button type="button" onClick={() => definirPrazo("15dias")} className="px-3 py-1 rounded bg-cyan-100 hover:bg-cyan-200 text-cyan-900 cursor-pointer">15 dias</button>
+                                    <button type="button" onClick={() => definirPrazo("1mes")} className="px-3 py-1 rounded bg-cyan-100 hover:bg-cyan-200 text-cyan-900 cursor-pointer">1 mês</button>
+                                    {prazo && <button type="button" onClick={() => setPrazo("")} className="px-3 py-1 rounded bg-slate-200 hover:bg-slate-300 cursor-pointer">Sem prazo</button>}
+                                </span>
+                            </label>
                         </div>
-                    </div>
-
-                    <div className="w-full flex items-center justify-between mt-6">
-                        <div className="flex gap-4">
-                            <input
-                                type="text"
-                                placeholder="Pesquisar livro..."
-                                className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                value={livro}
-                                onChange={(e) => setLivro(e.target.value)}
-                            />
-                            <input
-                                type="text"
-                                placeholder="Pesquisar aluno..."
-                                className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
-                                value={aluno}
-                                onChange={(e) => setAluno(e.target.value)}
-                            />
-                            <button
-                                type="button"
-                                onClick={() => {
-                                    carregarEmprestimos();
-                                }}
-                                className="flex items-center justify-center bg-[#006414] hover:bg-green-800 text-white p-3.5 rounded-md shadow transition-colors cursor-pointer"
-                                title="Pesquisar"
-                            >
-                                Pesquisar
-                            </button>
-                        </div>
-
-                        <button
-                            onClick={() => setIsModalOpen(true)}
-                            className="flex items-center gap-2 bg-[#006414] hover:bg-green-800 text-white font-normal text-lg px-6 py-3 rounded shadow transition-colors cursor-pointer"
-                        >
-                            <span>+ Cadastrar Empréstimo</span>
-                        </button>
-                    </div>
-                </div>
-            </main>
-
-            {isModalOpen && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-xl shadow-2xl border border-gray-200 relative">
-                        <button
-                            onClick={closeModal}
-                            className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold focus:outline-none cursor-pointer"
-                        >
-                            &times;
-                        </button>
-
-                        <div>
-                            <h2 className="text-3xl font-semibold text-gray-800 mb-6 text-center">
-                                Cadastro de Empréstimo
-                            </h2>
-
-                            <form
-                                onSubmit={handleCadastroSubmit}
-                                className="space-y-4"
-                            >
-                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            ID do Aluno
-                                        </label>
-                                        <input
-                                            required
-                                            type="text"
-                                            name="alunoId"
-                                            value={formData.alunoId}
-                                            onChange={handleInputChange}
-                                            className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600"
-                                        />
-                                    </div>
-
-                                    <div className="flex flex-col gap-1">
-                                        <label className="text-sm font-medium text-gray-700">
-                                            ID do Livro
-                                        </label>
-                                        <input
-                                            required
-                                            type="text"
-                                            name="livroId"
-                                            value={formData.livroId}
-                                            onChange={handleInputChange}
-                                            className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600"
-                                        />
-                                    </div>
-                                </div>
-
-                                <div className="flex flex-col gap-1">
-                                    <label className="text-sm font-medium text-gray-700">
-                                        Data de Devolução Prevista
-                                    </label>
-                                    <input
-                                        required
-                                        type="date"
-                                        name="dataDevolucaoPrevista"
-                                        value={formData.dataDevolucaoPrevista}
-                                        onChange={handleInputChange}
-                                        className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600"
-                                    />
-                                </div>
-
-                                <div className="flex gap-4 justify-end mt-6 pt-4 border-t border-gray-100">
+                        {sugestoes.length > 0 && (
+                            <div className="mt-3 bg-white border rounded p-2">
+                                <p className="text-sm text-gray-600">Cadastros encontrados — clique para selecionar:</p>
+                                {sugestoes.map((leitor) => (
                                     <button
                                         type="button"
-                                        onClick={closeModal}
-                                        className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer"
+                                        key={leitor.id}
+                                        onClick={() => selecionarLeitor(leitor)}
+                                        className="block text-left w-full hover:bg-slate-100 p-2 cursor-pointer"
                                     >
-                                        Cancelar
+                                        {leitor.nome} · {leitor.tipo === "PROFESSOR" ? "Professor" : leitor.serie || "Aluno"}
                                     </button>
-                                    <button
-                                        type="submit"
-                                        className="px-6 py-2.5 bg-[#006414] hover:bg-green-800 text-white font-medium rounded shadow transition-colors cursor-pointer"
-                                    >
-                                        Cadastrar Empréstimo
-                                    </button>
-                                </div>
-                            </form>
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
+
+                    <div className="p-5 rounded border">
+                        <h2 className="text-xl font-semibold mb-2">Exemplares ({selecionados.length})</h2>
+                        <input
+                            className="w-full border rounded p-2 mb-3"
+                            placeholder="Buscar título, autor ou ISBN"
+                            value={busca}
+                            onChange={(evento) => setBusca(evento.target.value)}
+                        />
+                        <div className="max-h-60 overflow-auto space-y-1">
+                            {visiveis.map((livro) => (
+                                <label key={livro.id} className="flex gap-2 p-2 hover:bg-slate-50 cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={selecionados.includes(livro.id)}
+                                        onChange={() =>
+                                            setSelecionados((atuais) =>
+                                                atuais.includes(livro.id)
+                                                    ? atuais.filter((id) => id !== livro.id)
+                                                    : [...atuais, livro.id],
+                                            )
+                                        }
+                                    />
+                                    <span>
+                                        {livro.titulo}{" "}
+                                        <small className="text-gray-500">
+                                            — {livro.autor || "sem autor"} · estoque disponível:{" "}
+                                            <span className={livro.disponiveis < 0 ? "text-orange-700 font-semibold" : ""}>
+                                                {livro.disponiveis}
+                                            </span>
+                                            {livro.isbn ? `, ISBN ${livro.isbn}` : ""}
+                                        </small>
+                                    </span>
+                                </label>
+                            ))}
+                            {!carregando && visiveis.length === 0 && (
+                                <p className="text-gray-500 p-2">Nenhum exemplar disponível.</p>
+                            )}
+                        </div>
+                        <button
+                            type="button"
+                            disabled={!nome.trim() || !selecionados.length || salvando}
+                            onClick={salvar}
+                            className="mt-4 bg-green-700 hover:bg-green-800 text-white rounded px-5 py-2 disabled:bg-gray-400 cursor-pointer disabled:cursor-not-allowed"
+                        >
+                            {salvando ? "Registrando..." : "Registrar empréstimo"}
+                        </button>
+                    </div>
+                </section>
+
+                <div className="flex flex-wrap items-end justify-between gap-3 mb-3">
+                    <div>
+                        <h2 className="text-2xl font-semibold">Empréstimos ativos</h2>
+                        <p className="text-sm text-gray-500">Empréstimos devolvidos ficam disponíveis somente nas exportações.</p>
+                    </div>
+                    <label className="w-full sm:w-96">
+                        <span className="text-sm text-gray-600">Pesquisar empréstimos ativos</span>
+                        <input
+                            type="search"
+                            value={buscaEmprestimos}
+                            onChange={(evento) => setBuscaEmprestimos(evento.target.value)}
+                            placeholder="Leitor, turma, livro ou ISBN"
+                            className="block w-full border rounded p-2"
+                        />
+                    </label>
                 </div>
-            )}
-            {selectedEmprestimo && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-lg shadow-2xl border border-gray-200 relative">
-                        <h2 className="text-3xl font-semibold text-gray-800 mb-6 border-b pb-2">
-                            Detalhes do Empréstimo
-                        </h2>
-
-                        <div className="space-y-4 text-lg text-gray-700">
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    ID do Aluno
-                                </span>
-
-                                <span className="text-cyan-600 font-medium">
-                                    {selectedEmprestimo.aluno.id}
-                                </span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    Nome do Aluno
-                                </span>
-
-                                <span>{selectedEmprestimo.aluno.nome}</span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    ID do Livro
-                                </span>
-
-                                <span className="text-cyan-600 font-medium">
-                                    {selectedEmprestimo.livro.id}
-                                </span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    Nome do Livro
-                                </span>
-
-                                <span>{selectedEmprestimo.livro.titulo}</span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    Data de Devolução
-                                </span>
-
+                {carregando ? (
+                    <p className="text-gray-500">Carregando...</p>
+                ) : (
+                    <div className="space-y-2">
+                        {emprestimosVisiveis.map((emprestimo) => (
+                            <div key={emprestimo.id} className="border rounded p-3 flex flex-wrap gap-3 justify-between">
                                 <span>
-                                    {new Date(
-                                        selectedEmprestimo.dataDevolucaoPrevista,
-                                    ).toLocaleDateString("pt-BR")}
+                                    <b>{emprestimo.livro.titulo}</b> — {emprestimo.aluno.nome}
+                                    {" · "}Prazo: {formatarData(emprestimo.dataDevolucaoPrevista)}
+                                </span>
+                                <span className="flex gap-3">
+                                    <em>{emprestimo.status}</em>
+                                    {emprestimo.status !== "DEVOLVIDO" && (
+                                        <button
+                                            type="button"
+                                            className="text-green-700 hover:underline cursor-pointer"
+                                            onClick={() => devolver(emprestimo)}
+                                        >
+                                            Devolver
+                                        </button>
+                                    )}
                                 </span>
                             </div>
-                        </div>
-
-                        <div className="flex justify-between mt-8 pt-4 border-t border-gray-100">
-                            <button
-                                type="button"
-                                onClick={() => setShowDeleteModal(true)}
-                                className="px-5 py-2.5 bg-red-600 text-white hover:bg-red-700 rounded transition-colors cursor-pointer"
-                            >
-                                Deletar Empréstimo
-                            </button>
-
-                            <div className="flex gap-3">
-                                {selectedEmprestimo.status !== "DEVOLVIDO" && (<button
-                                    type="button"
-                                    onClick={() => setShowReturnModal(true)}
-                                    className="px-5 py-2.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded transition-colors cursor-pointer"
-                                >
-                                    Devolver Livro
-                                </button>)}
-                                <button
-                                    type="button"
-                                    onClick={closeDetailsModal}
-                                    className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer"
-                                >
-                                    Fechar
-                                </button>
-                            </div>
-                        </div>
+                        ))}
+                        {emprestimosVisiveis.length === 0 && (
+                            <p className="text-gray-500 py-3">Nenhum empréstimo ativo encontrado.</p>
+                        )}
                     </div>
-                </div>
-            )}
-            {showDeleteModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-                        <h2 className="text-2xl font-semibold text-red-600 mb-4">
-                            Confirmar exclusão
-                        </h2>
-
-                        <p className="text-gray-600 mb-6">
-                            Tem certeza que deseja deletar este empréstimo?
-                        </p>
-
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowDeleteModal(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-                            >
-                                Cancelar
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    deleteEmprestimo();
-                                    setShowDeleteModal(false);
-                                    closeDetailsModal();
-                                }}
-                                className="px-4 py-2 bg-red-600 text-white hover:bg-red-700 rounded"
-                            >
-                                Deletar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showReturnModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-                        <h2 className="text-2xl font-semibold text-emerald-600 mb-4">
-                            Confirmar devolução
-                        </h2>
-
-                        <p className="text-gray-600 mb-6">
-                            Confirma a devolução deste livro?
-                        </p>
-
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowReturnModal(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-                            >
-                                Cancelar
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    confirmarDevolução();
-                                    setShowReturnModal(false);
-                                    closeDetailsModal();
-                                }}
-                                className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded"
-                            >
-                                Confirmar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
+                )}
+            </main>
         </div>
     );
 }
