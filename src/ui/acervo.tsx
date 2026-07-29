@@ -3,7 +3,6 @@ import type { ChangeEvent, FormEvent } from "react";
 import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
 import "./App.css";
-import { StatusLivro } from "@prisma/client";
 
 interface CadastroLivroForm {
     titulo: string;
@@ -14,12 +13,19 @@ interface CadastroLivroForm {
     unidade: number;
 }
 
-const statusStyles: Record<StatusLivro, string> = {
-    [StatusLivro.LIVRE]: "bg-blue-100 text-green-800",
-    [StatusLivro.EMPRESTADO]: "bg-red-100 text-red-800",
-};
-
 type ModalStep = "choice" | "form" | "import";
+
+const normalizarCabecalho = (valor: string) =>
+    valor
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "")
+        .trim()
+        .toLowerCase();
+
+const encontrarColuna = (colunas: string[], nomes: string[]) =>
+    colunas.find((coluna) =>
+        nomes.map(normalizarCabecalho).includes(normalizarCabecalho(coluna)),
+    ) || "";
 
 export default function Acervo() {
     const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
@@ -27,10 +33,14 @@ export default function Acervo() {
     const [livrosParaImportar, setLivrosParaImportar] = useState<
         CadastroLivroForm[]
     >([]);
+    const [linhasImportadas, setLinhasImportadas] = useState<Record<string, unknown>[]>([]);
+    const [colunasImportadas, setColunasImportadas] = useState<string[]>([]);
+    const [mapeamento, setMapeamento] = useState({ titulo: "", quantidade: "", autor: "", isbn: "", editora: "", numeroEdicao: "" });
     const [livroLista, setLivroLista] = useState<Livro[]>([]);
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [livro, setLivro] = useState("");
     const [showDeleteModal, setShowDeleteModal] = useState(false);
+    const [importando, setImportando] = useState(false);
 
     const [selectedLivro, setSelectedLivro] = useState<Livro | null>(null);
 
@@ -55,7 +65,31 @@ export default function Acervo() {
             unidades: "1",
         });
         setLivrosParaImportar([]);
+        setLinhasImportadas([]);
+        setColunasImportadas([]);
+        setMapeamento({ titulo: "", quantidade: "", autor: "", isbn: "", editora: "", numeroEdicao: "" });
     };
+
+    useEffect(() => {
+        if (!linhasImportadas.length || !mapeamento.titulo) {
+            setLivrosParaImportar([]);
+            return;
+        }
+        const valor = (linha: Record<string, unknown>, coluna: string) => coluna ? String(linha[coluna] ?? "").trim() : "";
+        const itens: CadastroLivroForm[] = [];
+        linhasImportadas.forEach((linha) => {
+            const titulo = valor(linha, mapeamento.titulo);
+            if (!titulo) return;
+            const quantidadeInformada = mapeamento.quantidade
+                ? Number(valor(linha, mapeamento.quantidade))
+                : 0;
+            const quantidade = Number.isFinite(quantidadeInformada)
+                ? Math.floor(quantidadeInformada)
+                : 0;
+            itens.push({ titulo, autor: valor(linha, mapeamento.autor), isbn: valor(linha, mapeamento.isbn) || null, editora: valor(linha, mapeamento.editora) || null, numeroEdicao: Number(valor(linha, mapeamento.numeroEdicao)) || null, unidade: quantidade });
+        });
+        setLivrosParaImportar(itens);
+    }, [linhasImportadas, mapeamento]);
 
     const deleteLivro = async () => {
         const response = await window.electronAPI.deleteLivro(selectedLivro);
@@ -104,22 +138,21 @@ export default function Acervo() {
     const handleCadastroSubmit = async (e: FormEvent<HTMLFormElement>) => {
         e.preventDefault();
 
-        const quantidade = Math.max(1, Number(formData.unidades || 1));
-        const novoLivro: CadastroLivroForm[] = [];
-
-        for (let i = 1; i <= quantidade; i++) {
-            novoLivro.push({
-                titulo: formData.titulo,
-                autor: formData.autor,
-                isbn: formData.isbn || null,
-                numeroEdicao: formData.numeroEdicao
-                    ? Number(formData.numeroEdicao)
-                    : null,
-                editora: formData.editora || null,
-                unidade: i,
-            });
-        }
-        const response = await window.electronAPI.cadastrarLivro(novoLivro);
+        const quantidadeInformada = Number(formData.unidades);
+        const quantidade = Number.isFinite(quantidadeInformada)
+            ? Math.floor(quantidadeInformada)
+            : 0;
+        const novoLivro: CadastroLivroForm = {
+            titulo: formData.titulo,
+            autor: formData.autor,
+            isbn: formData.isbn || null,
+            numeroEdicao: formData.numeroEdicao
+                ? Number(formData.numeroEdicao)
+                : null,
+            editora: formData.editora || null,
+            unidade: quantidade,
+        };
+        const response = await window.electronAPI.cadastrarLivro([novoLivro]);
 
         if (response.success) {
             console.log(
@@ -133,7 +166,7 @@ export default function Acervo() {
             alert("Erro ao cadastrar livro no banco de dados.");
         }
         console.log(
-            `Cadastrando ${quantidade} unidades individuais manualmente no Prisma:`,
+            `Adicionando ${quantidade} unidades ao estoque:`,
             novoLivro,
         );
         closeModal();
@@ -144,90 +177,101 @@ export default function Acervo() {
         if (!file) return;
 
         const reader = new FileReader();
-
         reader.onload = (event) => {
             const data = event.target?.result;
             if (!data) return;
 
-            const workbook = XLSX.read(data, { type: "binary" });
-            const sheetName = workbook.SheetNames[0];
-            const worksheet = workbook.Sheets[sheetName];
-            const jsonData = XLSX.utils.sheet_to_json<any>(worksheet);
+            try {
+                const workbook = XLSX.read(data, { type: "binary" });
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+                if (!worksheet) throw new Error("A planilha não possui uma aba válida.");
 
-            const livrosDesmembrados: CadastroLivroForm[] = [];
-
-            jsonData.forEach((row) => {
-                const qtdPlanilha = Number(
-                    row.unidades ||
-                        row.Unidades ||
-                        row.unidade ||
-                        row.Unidade ||
-                        1,
+                const jsonData = XLSX.utils.sheet_to_json<Record<string, unknown>>(
+                    worksheet,
+                    { defval: "", blankrows: false },
                 );
-                const quantidade = Math.max(1, qtdPlanilha);
+                if (!jsonData.length) throw new Error("A planilha está vazia.");
 
-                for (let i = 1; i <= quantidade; i++) {
-                    livrosDesmembrados.push({
-                        titulo: String(
-                            row.titulo ||
-                                row.Titulo ||
-                                row.nome ||
-                                row.Nome ||
-                                "",
-                        ),
-                        autor: String(row.autor || row.Autor || ""),
-                        isbn:
-                            row.isbn || row.ISBN
-                                ? String(row.isbn || row.ISBN)
-                                : null,
-                        numeroEdicao:
-                            row.numeroEdicao || row.edicao || row.Edição
-                                ? Number(
-                                      row.numeroEdicao ||
-                                          row.edicao ||
-                                          row.Edição,
-                                  )
-                                : null,
-                        editora:
-                            row.editora || row.Editora
-                                ? String(row.editora || row.Editora)
-                                : null,
-                        unidade: i,
-                    });
-                }
-            });
-
-            setLivrosParaImportar(livrosDesmembrados);
-            console.log(
-                "Linhas individuais geradas para o Prisma:",
-                livrosDesmembrados,
-            );
+                const colunas = Object.keys(jsonData[0]);
+                setLinhasImportadas(jsonData);
+                setColunasImportadas(colunas);
+                setMapeamento({
+                    titulo: encontrarColuna(colunas, ["titulo", "nome", "livro", "nome do livro"]),
+                    quantidade: encontrarColuna(colunas, [
+                        "quantidade",
+                        "qtd",
+                        "unidade",
+                        "unidades",
+                        "copias",
+                        "número de cópias",
+                        "numero de copias",
+                        "exemplares",
+                        "número de exemplares",
+                        "numero de exemplares",
+                    ]),
+                    autor: encontrarColuna(colunas, ["autor"]),
+                    isbn: encontrarColuna(colunas, ["isbn"]),
+                    editora: encontrarColuna(colunas, ["editora"]),
+                    numeroEdicao: encontrarColuna(colunas, [
+                        "edicao",
+                        "edição",
+                        "numero da edicao",
+                        "número da edição",
+                    ]),
+                });
+            } catch (erro) {
+                const mensagem = erro instanceof Error ? erro.message : String(erro);
+                window.electronAPI.registrarDebug(
+                    "Leitura da planilha do acervo",
+                    mensagem,
+                    erro instanceof Error ? erro.stack : undefined,
+                );
+                alert(`Não foi possível ler a planilha: ${mensagem}`);
+            }
         };
 
+        reader.onerror = () => {
+            const mensagem = reader.error?.message || "Falha ao acessar o arquivo selecionado.";
+            window.electronAPI.registrarDebug("Leitura da planilha do acervo", mensagem);
+            alert(mensagem);
+        };
         reader.readAsBinaryString(file);
     };
 
     const handleConfirmarImportacao = async () => {
         if (livrosParaImportar.length === 0)
             return alert("Nenhum dado importado válido.");
+        if (importando) return;
+        const totalUnidades = livrosParaImportar.reduce(
+            (total, livroImportado) => total + livroImportado.unidade,
+            0,
+        );
+        setImportando(true);
         console.log(
             "Enviando coleção unitária para o Prisma:",
             livrosParaImportar,
         );
-        const response =
-            await window.electronAPI.cadastrarLivro(livrosParaImportar);
-        if (response.success) {
-            console.log(
-                "Livros cadastrado com sucesso no banco local:",
-                response.data,
-            );
-            closeModal();
-            carregarLivros();
-        } else {
-            console.error("Erro ao salvar:", response.error);
-            alert("Erro ao cadastrar livro no banco de dados.");
+        try {
+            const quantidade = totalUnidades;
+            const response =
+                await window.electronAPI.cadastrarLivro(livrosParaImportar);
+            if (response.success) {
+                closeModal();
+                await carregarLivros();
+                alert(`${livrosParaImportar.length} títulos importados. Estoque informado: ${quantidade}.`);
+            } else {
+                console.error("Erro ao salvar:", response.error);
+                await window.electronAPI.registrarDebug(
+                    "Importação do acervo",
+                    response.error || "Erro ao cadastrar os livros importados.",
+                    `Quantidade de exemplares processados: ${quantidade}`,
+                );
+                alert(`Erro na importação: ${response.error || "consulte a tela Debug para mais detalhes."}`);
+            }
+        } finally {
+            setImportando(false);
         }
-        closeModal();
     };
 
     return (
@@ -259,6 +303,18 @@ export default function Acervo() {
                         className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
                     >
                         <span>Alunos</span>
+                    </Link>
+                    <Link
+                        to="/exportacao"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Exportação de dados</span>
+                    </Link>
+                    <Link
+                        to="/debug"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Debug</span>
                     </Link>
                 </nav>
             </aside>
@@ -322,12 +378,21 @@ export default function Acervo() {
                                                 )}
 
                                                 <span className="text-sm text-gray-400">
-                                                    Unidade: {livroItem.unidade}
+                                                    Estoque disponível: {livroItem.disponiveis} · Total informado: {livroItem.unidade}
                                                 </span>
 
-                                                <span
-                                                    className={`px-3 py-1 rounded-full text-sm font-semibold ${
-                                                        statusStyles[livroItem.status]}`}>{livroItem.status}
+                                                <span className={`px-3 py-1 rounded-full text-sm font-semibold ${
+                                                    livroItem.disponiveis > 0
+                                                        ? "bg-green-100 text-green-800"
+                                                        : livroItem.disponiveis < 0
+                                                          ? "bg-orange-100 text-orange-800"
+                                                          : "bg-red-100 text-red-800"
+                                                }`}>
+                                                    {livroItem.disponiveis > 0
+                                                        ? "DISPONÍVEL"
+                                                        : livroItem.disponiveis < 0
+                                                          ? "ESTOQUE NEGATIVO"
+                                                          : "SEM ESTOQUE"}
                                                 </span>
                                             </div>
                                         </div>
@@ -486,7 +551,6 @@ export default function Acervo() {
                                             <input
                                                 required
                                                 type="number"
-                                                min="1"
                                                 name="unidades"
                                                 value={formData.unidades}
                                                 onChange={handleInputChange}
@@ -522,12 +586,11 @@ export default function Acervo() {
                                     Importar Planilha do Acervo
                                 </h2>
                                 <p className="text-sm text-gray-500 mb-6 text-center">
-                                    O Excel deve conter colunas equivalentes a:{" "}
+                                    Cada linha representa um livro. O Excel deve conter:{" "}
                                     <b className="text-gray-700">
-                                        titulo, autor, numeroEdicao, isbn,
-                                        editora, unidades
+                                        título
                                     </b>
-                                    .
+                                    . Autor, edição, ISBN, editora e quantidade de cópias são opcionais.
                                 </p>
 
                                 <div className="w-full flex flex-col items-center justify-center border-2 border-dashed border-gray-300 rounded-lg p-8 bg-gray-50 hover:bg-gray-100 transition-colors relative group">
@@ -551,13 +614,23 @@ export default function Acervo() {
                                     </div>
                                 </div>
 
+                                {colunasImportadas.length > 0 && (
+                                    <div className="mt-4 w-full border rounded p-4 bg-white">
+                                        <p className="font-semibold mb-1">Mapeie as colunas da sua planilha.</p>
+                                        <p className="text-sm text-gray-600 mb-3">
+                                            Somente Título é obrigatório. Campos sem uma coluna correspondente podem ficar em branco.
+                                        </p>
+                                        <div className="grid grid-cols-2 gap-3 text-sm">
+                                            {([ ["titulo", "Título *"], ["quantidade", "Estoque (opcional)"], ["autor", "Autor"], ["isbn", "ISBN (diferencia títulos iguais)"], ["editora", "Editora"], ["numeroEdicao", "Edição"] ] as const).map(([campo, rotulo]) => <label key={campo} className="flex flex-col gap-1">{rotulo}<select value={mapeamento[campo]} onChange={(e) => setMapeamento((anterior) => ({ ...anterior, [campo]: e.target.value }))} className="border rounded p-2"><option value="">{campo === "titulo" ? "Selecione uma coluna" : "Deixar em branco"}</option>{colunasImportadas.map((coluna) => <option key={coluna} value={coluna}>{coluna}</option>)}</select></label>)}
+                                        </div>
+                                    </div>
+                                )}
+
                                 {livrosParaImportar.length > 0 && (
                                     <div className="mt-4 w-full bg-green-50 border border-green-200 text-green-800 p-4 rounded text-sm flex justify-between items-center">
                                         <span>
-                                            ✓ Foram gerados{" "}
-                                            <b>{livrosParaImportar.length}</b>{" "}
-                                            registros de livros unitários
-                                            prontos para o banco!
+                                            Planilha: <b>{livrosParaImportar.length}</b> títulos ·
+                                            Estoque total: <b>{livrosParaImportar.reduce((total, item) => total + item.unidade, 0)}</b> unidades
                                         </span>
                                     </div>
                                 )}
@@ -574,15 +647,15 @@ export default function Acervo() {
                                         type="button"
                                         onClick={handleConfirmarImportacao}
                                         disabled={
-                                            livrosParaImportar.length === 0
+                                            livrosParaImportar.length === 0 || importando
                                         }
                                         className={`px-6 py-2.5 text-white font-medium rounded shadow transition-colors ${
-                                            livrosParaImportar.length > 0
+                                            livrosParaImportar.length > 0 && !importando
                                                 ? "bg-blue-700 hover:bg-blue-800 cursor-pointer"
                                                 : "bg-gray-300 text-gray-500 cursor-not-allowed"
                                         }`}
                                     >
-                                        Confirmar Importação
+                                        {importando ? "Importando, aguarde..." : "Confirmar Importação"}
                                     </button>
                                 </div>
                             </div>
@@ -634,10 +707,16 @@ export default function Acervo() {
                                 </div>
                                 <div>
                                     <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                        Unidade Física
+                                        Estoque total
                                     </span>
-                                    <span>Nº {selectedLivro.unidade}</span>
+                                    <span>{selectedLivro.unidade} unidades</span>
                                 </div>
+                            </div>
+                            <div>
+                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
+                                    Disponíveis para empréstimo
+                                </span>
+                                <span>{selectedLivro.disponiveis} unidades</span>
                             </div>
                             <div>
                                 <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
