@@ -54,6 +54,8 @@ model Configuracao {
   modeloTermo             String  @default("")
   paresTermosPorFolha     Int     @default(2)
   tipoFolha               String  @default("A4")
+  painelDebugAtivo        Boolean @default(true)
+  modoEscuro              Boolean @default(false)
 
   @@map("configuracoes")
 }

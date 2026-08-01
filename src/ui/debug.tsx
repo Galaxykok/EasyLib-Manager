@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import Sidebar from "./sidebar.tsx";
 
 type LogDebug = {
     id: number;
@@ -43,6 +44,7 @@ export default function Debug() {
     const [carregando, setCarregando] = useState(true);
     const [retorno, setRetorno] = useState("");
     const [limpando, setLimpando] = useState<TipoLimpeza | null>(null);
+    const [debugAtivo, setDebugAtivo] = useState<boolean | null>(null);
 
     const atualizar = async () => {
         const resposta = await window.electronAPI.obterLogsDebug();
@@ -51,10 +53,20 @@ export default function Debug() {
     };
 
     useEffect(() => {
-        atualizar();
-        const intervalo = window.setInterval(atualizar, 2000);
-        return () => window.clearInterval(intervalo);
+        window.electronAPI.obterConfiguracao().then((resposta) => {
+            setDebugAtivo(resposta.data?.painelDebugAtivo ?? true);
+        });
     }, []);
+
+    useEffect(() => {
+        if (!debugAtivo) return;
+        const inicial = window.setTimeout(atualizar, 0);
+        const intervalo = window.setInterval(atualizar, 2000);
+        return () => {
+            window.clearTimeout(inicial);
+            window.clearInterval(intervalo);
+        };
+    }, [debugAtivo]);
 
     const limpar = async () => {
         const resposta = await window.electronAPI.limparLogsDebug();
@@ -98,37 +110,46 @@ export default function Debug() {
         }
     };
 
-    return (
-        <div className="flex min-h-screen bg-white font-sans">
-            <aside className="w-64 p-6 border-r-8 border-gray-300">
-                <nav className="flex flex-col gap-5 text-xl text-gray-800">
-                    <Link to="/">Home</Link>
-                    <Link to="/acervo">Acervo</Link>
-                    <Link to="/emprestimos">Empréstimos</Link>
-                    <Link to="/aluno">Alunos</Link>
-                    <Link to="/exportacao">Exportação de dados</Link>
-                    <Link className="font-semibold text-cyan-600" to="/debug">Debug</Link>
-                    <Link to="/configuracoes">Configurações</Link>
-                </nav>
-            </aside>
-            <main className="flex-1 p-8 overflow-y-auto flex flex-col">
-                <div className="flex items-start justify-between gap-4 mb-6">
-                    <div>
-                        <h1 className="text-4xl font-semibold mb-2">Debug</h1>
-                        <p className="text-gray-600">Erros do sistema aparecem automaticamente nesta tela.</p>
+    if (debugAtivo === false) {
+        return (
+            <div className="flex min-h-screen bg-[#eaf0f6]">
+                <Sidebar />
+                <main className="flex-1 flex items-center justify-center p-8">
+                    <div className="max-w-lg bg-cyan-50 border border-cyan-300 shadow-[0_12px_30px_rgba(8,145,178,0.13)] rounded-3xl p-8 text-center">
+                        <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-cyan-700 flex items-center justify-center mx-auto mb-4 font-mono text-lg font-bold">&lt;/&gt;</div>
+                        <h1 className="text-2xl font-semibold">Painel de Debug desativado</h1>
+                        <p className="text-slate-500 mt-2 mb-5">Ative o painel nas Configurações para acessar logs e ferramentas técnicas.</p>
+                        <Link to="/configuracoes" className="inline-block bg-cyan-700 hover:bg-cyan-800 text-white rounded-xl px-5 py-2.5">Abrir Configurações</Link>
                     </div>
-                    <div className="flex gap-2">
-                        <button type="button" onClick={atualizar} className="px-4 py-2 rounded bg-slate-200 hover:bg-slate-300 cursor-pointer">Atualizar</button>
-                        <button type="button" onClick={copiar} className="px-4 py-2 rounded bg-cyan-700 hover:bg-cyan-800 text-white cursor-pointer">Copiar logs</button>
-                        <button type="button" onClick={limpar} className="px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-white cursor-pointer">Limpar</button>
+                </main>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex min-h-screen bg-[#eaf0f6] font-sans">
+            <Sidebar />
+            <main className="flex-1 p-8 xl:p-10 overflow-y-auto flex flex-col">
+                <div className="max-w-6xl w-full mx-auto">
+                <div className="relative mb-6 flex flex-col gap-5 overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-900 p-6 text-white shadow-[0_16px_40px_rgba(15,23,42,0.2)] lg:flex-row lg:items-center lg:justify-between">
+                    <div className="absolute -right-10 -top-20 h-52 w-52 rounded-full bg-cyan-400/10" />
+                    <div className="relative">
+                        <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-cyan-300">FERRAMENTAS TÉCNICAS</p>
+                        <h1 className="text-4xl font-semibold tracking-tight">Painel de Debug</h1>
+                        <p className="mt-2 text-slate-300">Erros do sistema aparecem automaticamente nesta tela.</p>
+                    </div>
+                    <div className="relative flex flex-wrap gap-2">
+                        <button type="button" onClick={atualizar} className="cursor-pointer rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 font-medium text-white transition hover:bg-white/20">Atualizar</button>
+                        <button type="button" onClick={copiar} className="cursor-pointer rounded-xl bg-cyan-500 px-4 py-2.5 font-semibold text-slate-950 shadow-sm transition hover:bg-cyan-400">Copiar logs</button>
+                        <button type="button" onClick={limpar} className="cursor-pointer rounded-xl border border-red-300/50 bg-red-500/15 px-4 py-2.5 font-medium text-red-100 transition hover:bg-red-500/30">Limpar logs</button>
                     </div>
                 </div>
                 {retorno && (
-                    <div className="mb-4 rounded bg-emerald-100 text-emerald-800 px-4 py-2" role="status">
+                    <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 font-medium text-emerald-800 shadow-sm" role="status">
                         {retorno}
                     </div>
                 )}
-                <section className="h-[45vh] min-h-72 overflow-auto rounded-lg bg-slate-950 text-slate-100 p-4 font-mono">
+                <section className="h-[45vh] min-h-72 overflow-auto rounded-2xl border border-slate-800 bg-slate-950 p-5 font-mono text-slate-100 shadow-lg">
                     {carregando ? (
                         <p className="text-slate-400">Carregando...</p>
                     ) : logs.length === 0 ? (
@@ -136,7 +157,7 @@ export default function Debug() {
                     ) : (
                         <div className="space-y-4">
                             {logs.map((log) => (
-                                <article key={log.id} className="border-l-4 border-red-500 bg-slate-900 p-4 rounded">
+                                <article key={log.id} className="rounded-xl border border-slate-800 border-l-4 border-l-red-500 bg-slate-900 p-4">
                                     <div className="flex flex-wrap gap-x-3 text-sm text-slate-400 mb-2">
                                         <time>{new Date(log.dataHora).toLocaleString("pt-BR")}</time>
                                         <span>{log.origem}</span>
@@ -154,23 +175,29 @@ export default function Debug() {
                     )}
                 </section>
 
-                <section className="mt-6 border-2 border-red-200 bg-red-50 rounded-lg p-5">
-                    <h2 className="text-2xl font-semibold text-red-800">Manutenção do banco de dados</h2>
-                    <p className="text-red-700 mt-1 mb-4">
-                        Use somente quando quiser apagar uma categoria específica. Cada opção é independente.
-                    </p>
+                <section className="mt-6 rounded-2xl border border-amber-300 bg-amber-50 p-6 shadow-[0_8px_24px_rgba(180,83,9,0.08)]">
+                    <div className="mb-5 flex items-start gap-4">
+                        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-amber-300 bg-amber-100 font-bold text-amber-800" aria-hidden="true">!</div>
+                        <div>
+                            <p className="text-xs font-semibold tracking-[0.15em] text-slate-500">ZONA DE MANUTENÇÃO</p>
+                            <h2 className="mt-1 text-2xl font-semibold text-slate-900">Manutenção do banco de dados</h2>
+                            <p className="mt-1 text-sm leading-relaxed text-slate-500">
+                                Use somente quando quiser apagar uma categoria específica. Cada opção é independente.
+                            </p>
+                        </div>
+                    </div>
                     <div className="grid md:grid-cols-2 gap-3">
                         {opcoesLimpeza.map((opcao) => (
-                            <div key={opcao.tipo} className="bg-white border border-red-200 rounded p-4 flex items-center justify-between gap-4">
+                            <div key={opcao.tipo} className="flex items-center justify-between gap-4 rounded-xl border border-amber-200 bg-white/70 p-4 shadow-sm transition hover:border-amber-400 hover:bg-amber-100/60">
                                 <div>
-                                    <strong className="block text-gray-900">{opcao.titulo}</strong>
-                                    <span className="text-sm text-gray-600">{opcao.descricao}</span>
+                                    <strong className="block text-slate-900">{opcao.titulo}</strong>
+                                    <span className="mt-1 block text-sm leading-relaxed text-slate-500">{opcao.descricao}</span>
                                 </div>
                                 <button
                                     type="button"
                                     disabled={limpando !== null}
                                     onClick={() => limparDados(opcao.tipo, opcao.titulo)}
-                                    className="shrink-0 px-4 py-2 rounded bg-red-700 hover:bg-red-800 text-white cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="shrink-0 cursor-pointer rounded-xl border border-red-200 bg-white px-4 py-2 font-semibold text-red-700 transition hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {limpando === opcao.tipo ? "Limpando..." : "Limpar"}
                                 </button>
@@ -178,6 +205,7 @@ export default function Debug() {
                         ))}
                     </div>
                 </section>
+                </div>
             </main>
         </div>
     );

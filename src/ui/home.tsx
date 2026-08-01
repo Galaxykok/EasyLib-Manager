@@ -1,345 +1,146 @@
-import logoIcon from "./assets/icon.png";
-import "./App.css";
+import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { useState, useEffect } from "react";
-import { StatusEmprestimo } from "./enum.ts";
+import Sidebar from "./sidebar.tsx";
 
-const statusStyles: Record<StatusEmprestimo, string> = {
-    [StatusEmprestimo.ATIVO]: "bg-blue-100 text-green-800",
-    [StatusEmprestimo.DEVOLVIDO]: "bg-green-100 text-blue-800",
-    [StatusEmprestimo.ATRASADO]: "bg-red-100 text-red-800",
-};
+const formatarData = (valor: Date | string | null) =>
+    valor ? new Date(valor).toLocaleDateString("pt-BR") : "Sem prazo";
 
 export default function Home() {
-    const [emprestimoLista, setEmprestimoLista] = useState<Emprestimo[]>([]);
-    const [isLoading, setIsLoading] = useState<boolean>(true);
-    const [selectedEmprestimo, setSelectedEmprestimo] = useState<Emprestimo | null>(null);
-    const [showReturnModal, setShowReturnModal] = useState(false);
-
-    const carregarEmprestimos = async () => {
-        setIsLoading(true);
-        const response = await window.electronAPI.obterEmprestimo();
-        if (response.success && response.data) {
-            setEmprestimoLista(response.data);
-        } else {
-            console.error("Erro ao carregar alunos:", response.error);
-        }
-        setIsLoading(false);
-    };
+    const [dashboard, setDashboard] = useState<Dashboard | null>(null);
+    const [emprestimos, setEmprestimos] = useState<Emprestimo[]>([]);
+    const [responsavel, setResponsavel] = useState("Responsável");
+    const [carregando, setCarregando] = useState(true);
 
     useEffect(() => {
-        carregarEmprestimos();
+        Promise.all([
+            window.electronAPI.obterDashboard(),
+            window.electronAPI.obterEmprestimo(),
+            window.electronAPI.obterConfiguracao(),
+        ]).then(([resumo, lista, configuracao]) => {
+            if (resumo.success && resumo.data) setDashboard(resumo.data);
+            if (lista.success && lista.data) setEmprestimos(lista.data);
+            if (configuracao.success && configuracao.data?.responsavelBiblioteca.trim()) {
+                setResponsavel(configuracao.data.responsavelBiblioteca.trim().split(/\s+/)[0]);
+            }
+            setCarregando(false);
+        });
     }, []);
 
-    const closeDetailsModal = (): void => {
-        setSelectedEmprestimo(null);
-    };
+    const saudacao = useMemo(() => {
+        const hora = new Date().getHours();
+        if (hora < 12) return { texto: "Bom dia", icone: "☀️", gradiente: "from-[#0f4c5c] via-cyan-700 to-amber-400", detalhe: "Que seu dia comece com boas histórias." };
+        if (hora < 18) return { texto: "Boa tarde", icone: "🌤️", gradiente: "from-[#0f4c5c] via-cyan-700 to-sky-500", detalhe: "Uma ótima tarde de leitura e organização." };
+        return { texto: "Boa noite", icone: "🌙", gradiente: "from-slate-950 via-indigo-900 to-slate-700", detalhe: "Encerrando mais um dia de conhecimento." };
+    }, []);
 
-    const confirmarDevolução = async () => {
-        const response = await window.electronAPI.confirmarDevolucao(selectedEmprestimo)
-        if (response.success && response.data){
-            carregarEmprestimos();
-        } else {
-            alert("Erro ao devolver livro no sistema")
-            console.log(response.error)
-        }
-    }
+    const proximos = useMemo(() =>
+        emprestimos
+            .filter((emprestimo) => emprestimo.dataDevolucaoPrevista)
+            .sort((a, b) => new Date(a.dataDevolucaoPrevista!).getTime() - new Date(b.dataDevolucaoPrevista!).getTime())
+            .slice(0, 7),
+    [emprestimos]);
+
+    const estatisticas = [
+        { rotulo: "Empréstimos no mês", valor: dashboard?.emprestimosMes ?? 0, detalhe: "registros neste mês", cor: "bg-cyan-100 text-cyan-800", borda: "border-t-cyan-500", icone: "↗" },
+        { rotulo: "Empréstimos hoje", valor: dashboard?.emprestimosHoje ?? 0, detalhe: "movimentações hoje", cor: "bg-emerald-100 text-emerald-800", borda: "border-t-emerald-500", icone: "◷" },
+        { rotulo: "Livro favorito", valor: dashboard?.livroFavorito?.nome || "Sem dados", detalhe: dashboard?.livroFavorito ? `${dashboard.livroFavorito.total} empréstimo(s)` : "neste mês", cor: "bg-violet-100 text-violet-800", borda: "border-t-violet-500", icone: "★" },
+        { rotulo: "Série em destaque", valor: dashboard?.serieDestaque?.nome || "Sem dados", detalhe: dashboard?.serieDestaque ? `${dashboard.serieDestaque.total} empréstimo(s)` : "neste mês", cor: "bg-blue-100 text-blue-800", borda: "border-t-blue-500", icone: "◆" },
+        { rotulo: "Leitor destaque", valor: dashboard?.alunoDestaque?.nome || "Sem dados", detalhe: dashboard?.alunoDestaque ? `${dashboard.alunoDestaque.total} empréstimo(s)` : "neste mês", cor: "bg-amber-100 text-amber-800", borda: "border-t-amber-500", icone: "♙" },
+    ];
 
     return (
-        <div className="flex h-screen w-screen bg-white font-sans overflow-hidden">
-            <aside className="w-64 flex flex-col pt-16 relative bg-white flex-shrink-0">
-                <div className="absolute right-0 top-0 bottom-0 w-2 bg-gray-300" />
-                <nav className="flex flex-col gap-6 pl-6 z-10">
-                    <Link
-                        to="/"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer"
-                    >
-                        <span className="w-6 h-6 bg-cyan-400 block" />
-                        <span>Home</span>
-                    </Link>
-
-                    <Link
-                        to="/acervo"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Acervo</span>
-                    </Link>
-
-                    <Link
-                        to="/emprestimos"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Empréstimos</span>
-                    </Link>
-
-                    <Link
-                        to="/aluno"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Alunos</span>
-                    </Link>
-
-                    <Link
-                        to="/exportacao"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Exportação de dados</span>
-                    </Link>
-                    <Link
-                        to="/debug"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Debug</span>
-                    </Link>
-                    <Link
-                        to="/configuracoes"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Configurações</span>
-                    </Link>
-                </nav>
-            </aside>
-
-            <main className="flex-1 flex flex-col items-center pt-8 px-12 bg-white overflow-y-auto">
-                {/* Header centralizado com espaçamento reduzido */}
-                <header className="flex items-center justify-center gap-6 mb-6 w-full max-w-7xl">
-                    <h1 className="text-4xl font-medium tracking-wide text-center text-gray-800">
-                        Seja bem-vindo ao EasyLib Manager
-                    </h1>
-
-                    <img
-                        src={logoIcon}
-                        className="w-24 h-24 object-contain flex-shrink-0"
-                        alt="Logo"
-                    />
-                </header>
-                <section className="w-full max-w-7xl flex flex-col h-full justify-between pb-8">
-                    <div>
-                        <h2 className="text-xl font-semibold text-gray-800 text-center mb-4">
-                            Empréstimos próximos do vencimento:
-                        </h2>
-
-                        <div className="w-full h-[65vh] bg-[#E2E6F3] border-2 border-black rounded-md p-6 overflow-y-auto shadow-sm">
-                            {isLoading ? (
-                                <div className="text-center text-gray-600 text-xl m-auto">
-                                    Carregando empréstimos...
-                                </div>
-                            ) : emprestimoLista.length === 0 ? (
-                                <div className="text-center text-gray-500 text-xl m-auto">
-                                    Nenhum empréstimo encontrado.
-                                </div>
-                            ) : (
-                                <div className="flex flex-col gap-2">
-                                    {emprestimoLista
-                                        .map((emprestimo) => {
-                                            const hoje = new Date();
-                                            const dataPrevista = emprestimo.dataDevolucaoPrevista
-                                                ? new Date(emprestimo.dataDevolucaoPrevista)
-                                                : null;
-
-                                            const diffDias = dataPrevista
-                                                ? Math.ceil((dataPrevista.getTime() - hoje.getTime()) / (1000 * 60 * 60 * 24))
-                                                : Number.POSITIVE_INFINITY;
-
-                                            return {
-                                                ...emprestimo,
-                                                diffDias,
-                                            };
-                                        })
-                                        .filter(
-                                            (emprestimo) =>
-                                                emprestimo.diffDias < 3 && emprestimo.status !== "DEVOLVIDO",
-                                        )
-                                        .map((emprestimo) => {
-                                            const corCirculo =
-                                                emprestimo.status === "ATRASADO"
-                                                    ? "bg-red-500"
-                                                    : "bg-yellow-400";
-
-                                            return (
-                                                <div
-                                                    key={emprestimo.id}
-                                                    onClick={() =>
-                                                        setSelectedEmprestimo(
-                                                            emprestimo,
-                                                        )
-                                                    }
-                                                    className="flex justify-between items-center bg-white border border-gray-300 p-4 rounded shadow-sm hover:border-gray-400 transition-all cursor-pointer"
-                                                >
-                                                    <div className="flex flex-col flex-1">
-                                                        <span className="text-xl font-medium text-gray-800">
-                                                            {
-                                                                emprestimo.aluno
-                                                                    .nome
-                                                            }
-                                                        </span>
-
-                                                        <span className="text-sm text-gray-500">
-                                                            {
-                                                                emprestimo.livro
-                                                                    .titulo
-                                                            }
-                                                        </span>
-                                                    </div>
-
-                                                    <div className="flex items-center gap-4">
-                                                        <div className="flex flex-col items-end gap-2">
-                                                            <span className="bg-cyan-100 text-cyan-800 font-semibold px-3 py-1 rounded-full text-sm">
-                                                                {emprestimo.dataDevolucaoPrevista
-                                                                    ? new Date(emprestimo.dataDevolucaoPrevista).toLocaleDateString("pt-BR")
-                                                                    : "Sem prazo"}
-                                                            </span>
-
-                                                            <span
-                                                                className={`px-3 py-1 rounded-full ${statusStyles[emprestimo.status]}`}
-                                                            >
-                                                                {
-                                                                    emprestimo.status
-                                                                }
-                                                            </span>
-                                                        </div>
-                                                        <div
-                                                            className={`w-4 h-4 rounded-full ${corCirculo}`}
-                                                        />
-                                                    </div>
-                                                </div>
-                                            );
-                                        })}
-                                </div>
-                            )}
+        <div className="flex min-h-screen bg-[#eaf0f6] text-slate-900">
+            <Sidebar />
+            <main className="flex-1 min-w-0 p-8 xl:p-10 overflow-y-auto">
+                <div className="max-w-7xl mx-auto">
+                    <div className="flex items-center justify-between mb-4">
+                        <div>
+                            <p className="text-xs font-semibold tracking-[0.18em] text-cyan-800">VISÃO GERAL</p>
+                            <h2 className="text-2xl font-semibold tracking-tight mt-1">Painel da biblioteca</h2>
                         </div>
+                        <span className="px-3 py-1.5 rounded-full bg-cyan-100 border border-cyan-200 text-xs font-semibold text-cyan-900 shadow-sm">Dados deste mês</span>
+                    </div>
+                    <section className={`relative overflow-hidden bg-gradient-to-br ${saudacao.gradiente} border border-white/20 rounded-3xl p-7 mb-7 text-white shadow-[0_18px_45px_rgba(15,76,92,0.22)]`}>
+                        <div className="absolute -right-10 -top-14 w-52 h-52 rounded-full bg-white/15" />
+                        <div className="absolute right-32 -bottom-20 w-40 h-40 rounded-full bg-white/10" />
+                        <div className="relative flex items-center justify-between gap-6">
+                            <div>
+                                <p className="text-sm font-medium text-white/70 mb-1 capitalize">
+                                    {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
+                                </p>
+                                <h1 className="text-4xl font-semibold tracking-tight">{saudacao.texto}, {responsavel}!</h1>
+                                <p className="text-white/80 mt-2">{saudacao.detalhe}</p>
+                            </div>
+                            <span className="text-7xl drop-shadow-sm bg-white/10 border border-white/15 rounded-3xl w-28 h-28 flex items-center justify-center backdrop-blur-sm" aria-hidden="true">{saudacao.icone}</span>
+                        </div>
+                    </section>
+
+                    <div className="grid grid-cols-2 xl:grid-cols-5 gap-4 mb-7">
+                        {estatisticas.map((item) => (
+                            <article key={item.rotulo} className={`bg-gradient-to-br from-sky-50 to-cyan-50/80 border border-sky-200 border-t-4 ${item.borda} rounded-2xl p-5 shadow-[0_7px_22px_rgba(14,116,144,0.09)] hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-lg transition-all min-w-0`}>
+                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl mb-4 ${item.cor}`}>{item.icone}</div>
+                                <p className="text-sm text-slate-500">{item.rotulo}</p>
+                                <strong className="block text-xl mt-1 truncate" title={String(item.valor)}>{item.valor}</strong>
+                                <span className="text-xs text-slate-400 mt-1 block">{item.detalhe}</span>
+                            </article>
+                        ))}
                     </div>
 
-                    <footer className="flex items-center gap-8 mt-4 pl-2">
-                        <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 rounded-full bg-red-600 block" />
-                            <span className="text-lg font-semibold text-gray-900">
-                                Atrasados
-                            </span>
-                        </div>
+                    <div className="grid xl:grid-cols-[1fr_330px] gap-6">
+                        <section className="bg-sky-50/80 border-2 border-sky-200 rounded-2xl shadow-[0_8px_24px_rgba(14,116,144,0.08)] overflow-hidden">
+                            <header className="flex items-center justify-between px-6 py-5 border-b border-slate-700 bg-slate-800 text-white">
+                                <div>
+                                    <h2 className="text-xl font-semibold">Próximas devoluções</h2>
+                                    <p className="text-sm text-slate-300">Acompanhe os prazos que precisam de atenção.</p>
+                                </div>
+                                <Link to="/emprestimos" className="text-sm font-semibold text-cyan-300 hover:text-cyan-100">Ver todos →</Link>
+                            </header>
+                            <div className="divide-y divide-sky-200">
+                                {carregando ? (
+                                    <p className="p-6 text-slate-500">Carregando painel...</p>
+                                ) : proximos.length === 0 ? (
+                                    <div className="p-10 text-center text-slate-500">
+                                        <span className="text-3xl block mb-2">✓</span>
+                                        Nenhuma devolução pendente com prazo definido.
+                                    </div>
+                                ) : proximos.map((emprestimo) => {
+                                    const atrasado = emprestimo.status === "ATRASADO";
+                                    return (
+                                        <div key={emprestimo.id} className="flex items-center gap-4 px-6 py-4 hover:bg-cyan-100/70 transition-colors">
+                                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${atrasado ? "bg-red-500" : "bg-amber-400"}`} />
+                                            <div className="min-w-0 flex-1">
+                                                <strong className="block truncate">{emprestimo.livro.titulo}</strong>
+                                                <span className="text-sm text-slate-500">{emprestimo.aluno.nome} · {emprestimo.aluno.serie || "Sem turma"}</span>
+                                            </div>
+                                            <span className={`text-sm font-medium px-3 py-1.5 rounded-full ${atrasado ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
+                                                {atrasado ? "Atrasado · " : "Até "}{formatarData(emprestimo.dataDevolucaoPrevista)}
+                                            </span>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </section>
 
-                        <div className="flex items-center gap-3">
-                            <span className="w-6 h-6 rounded-full bg-yellow-400 block" />
-                            <span className="text-lg font-semibold text-gray-900">
-                                Faltam 3 dias ou menos
-                            </span>
-                        </div>
-                    </footer>
-                </section>
+                        <aside className="space-y-4">
+                            <article className="bg-slate-900 text-white rounded-2xl p-6 shadow-sm">
+                                <p className="text-slate-300 text-sm">Situação atual</p>
+                                <div className="flex items-end justify-between mt-4">
+                                    <div><strong className="text-4xl">{dashboard?.ativos ?? 0}</strong><span className="block text-sm text-slate-300">ativos</span></div>
+                                    <div className="text-right"><strong className="text-3xl text-red-300">{dashboard?.atrasados ?? 0}</strong><span className="block text-sm text-slate-300">atrasados</span></div>
+                                </div>
+                            </article>
+                            <Link to="/emprestimos" className="block bg-green-700 hover:bg-green-800 text-white rounded-2xl p-5 transition-colors shadow-sm">
+                                <strong className="block text-lg">Novo empréstimo</strong>
+                                <span className="text-sm text-green-100">Registrar livros e gerar termo →</span>
+                            </Link>
+                            <Link to="/acervo" className="block bg-cyan-700 border border-cyan-600 hover:bg-cyan-800 text-white rounded-2xl p-5 transition-colors shadow-sm">
+                                <strong className="block text-lg">Consultar acervo</strong>
+                                <span className="text-sm text-cyan-100">Pesquisar títulos e estoque →</span>
+                            </Link>
+                        </aside>
+                    </div>
+                </div>
             </main>
-            {selectedEmprestimo && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-lg shadow-2xl border border-gray-200 relative">
-                        <h2 className="text-3xl font-semibold text-gray-800 mb-6 border-b pb-2">
-                            Detalhes do Empréstimo
-                        </h2>
-
-                        <div className="space-y-4 text-lg text-gray-700">
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    ID do Aluno
-                                </span>
-
-                                <span className="text-cyan-600 font-medium">
-                                    {selectedEmprestimo.aluno.id}
-                                </span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    Nome do Aluno
-                                </span>
-
-                                <span>{selectedEmprestimo.aluno.nome}</span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    ID do Livro
-                                </span>
-
-                                <span className="text-cyan-600 font-medium">
-                                    {selectedEmprestimo.livro.id}
-                                </span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    Nome do Livro
-                                </span>
-
-                                <span>{selectedEmprestimo.livro.titulo}</span>
-                            </div>
-
-                            <div>
-                                <span className="font-bold text-gray-500 block text-sm uppercase tracking-wider">
-                                    Data de Devolução
-                                </span>
-
-                                <span>
-                                    {selectedEmprestimo.dataDevolucaoPrevista
-                                        ? new Date(selectedEmprestimo.dataDevolucaoPrevista).toLocaleDateString("pt-BR")
-                                        : "Sem prazo"}
-                                </span>
-                            </div>
-                        </div>
-
-                        <div className="flex justify-between mt-8 pt-4 border-t border-gray-100">
-
-
-                            <div className="flex gap-3">
-                                <button
-                                    type="button"
-                                    onClick={() => setShowReturnModal(true)}
-                                    className="px-5 py-2.5 bg-emerald-600 text-white hover:bg-emerald-700 rounded transition-colors cursor-pointer"
-                                >
-                                    Devolver Livro
-                                </button>
-                                <button
-                                    type="button"
-                                    onClick={() => closeDetailsModal()}
-                                    className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer"
-                                >
-                                    Fechar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            )}
-            {showReturnModal && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
-                        <h2 className="text-2xl font-semibold text-emerald-600 mb-4">
-                            Confirmar devolução
-                        </h2>
-
-                        <p className="text-gray-600 mb-6">
-                            Confirma a devolução deste livro?
-                        </p>
-
-                        <div className="flex justify-end gap-3">
-                            <button
-                                onClick={() => setShowReturnModal(false)}
-                                className="px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded"
-                            >
-                                Cancelar
-                            </button>
-
-                            <button
-                                onClick={() => {
-                                    confirmarDevolução();
-                                    setShowReturnModal(false);
-                                    closeDetailsModal();
-                                }}
-                                className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded"
-                            >
-                                Confirmar
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

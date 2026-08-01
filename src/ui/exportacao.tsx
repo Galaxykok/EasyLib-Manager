@@ -1,6 +1,6 @@
 import { useState } from "react";
-import { Link } from "react-router-dom";
 import * as XLSX from "xlsx";
+import Sidebar from "./sidebar.tsx";
 
 type Movimento = {
     id: number;
@@ -21,6 +21,16 @@ type DadosExportacao = {
 
 type TipoExportacao = keyof DadosExportacao;
 
+type OpcaoExportacao = {
+    tipo: TipoExportacao;
+    titulo: string;
+    descricao: string;
+    categoria: string;
+    fundoIcone: string;
+    corIcone: string;
+    fundoCard: string;
+};
+
 const formatarData = (valor: string | Date | null | undefined) =>
     valor ? new Date(valor).toLocaleDateString("pt-BR") : "";
 
@@ -38,6 +48,96 @@ const rotulosMovimentacao: Record<string, string> = {
     DEVOLUCAO: "Devolução",
     EMPRESTIMO_EXCLUIDO: "Empréstimo excluído",
 };
+
+const opcoes: OpcaoExportacao[] = [
+    {
+        tipo: "acervo",
+        titulo: "Acervo atual",
+        descricao: "Todos os títulos cadastrados, estoque e disponibilidade atual.",
+        categoria: "Inventário",
+        fundoIcone: "bg-cyan-100",
+        corIcone: "text-cyan-800",
+        fundoCard: "bg-cyan-50 border-cyan-200",
+    },
+    {
+        tipo: "ativos",
+        titulo: "Empréstimos ativos",
+        descricao: "Empréstimos que permanecem em aberto no período selecionado.",
+        categoria: "Circulação",
+        fundoIcone: "bg-emerald-100",
+        corIcone: "text-emerald-700",
+        fundoCard: "bg-emerald-50 border-emerald-200",
+    },
+    {
+        tipo: "historico",
+        titulo: "Histórico de empréstimos",
+        descricao: "Registro completo, incluindo empréstimos já devolvidos.",
+        categoria: "Histórico",
+        fundoIcone: "bg-indigo-100",
+        corIcone: "text-indigo-700",
+        fundoCard: "bg-indigo-50 border-indigo-200",
+    },
+    {
+        tipo: "movimentacoes",
+        titulo: "Movimentações",
+        descricao: "Livros adicionados, retiradas, devoluções e exclusões.",
+        categoria: "Auditoria",
+        fundoIcone: "bg-amber-100",
+        corIcone: "text-amber-800",
+        fundoCard: "bg-amber-50 border-amber-200",
+    },
+    {
+        tipo: "atrasados",
+        titulo: "Empréstimos atrasados",
+        descricao: "Empréstimos vencidos que precisam de acompanhamento.",
+        categoria: "Pendências",
+        fundoIcone: "bg-red-100",
+        corIcone: "text-red-700",
+        fundoCard: "bg-rose-50 border-rose-200",
+    },
+];
+
+function IconeExportacao({ tipo }: { tipo: TipoExportacao }) {
+    const classe = "h-6 w-6";
+
+    if (tipo === "acervo") {
+        return (
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={classe}>
+                <path d="M5 4.5A2.5 2.5 0 0 1 7.5 2H19v17H7.5A2.5 2.5 0 0 0 5 21.5v-17Z" strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="M5 19.5A2.5 2.5 0 0 1 7.5 17H19M9 6h6" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+        );
+    }
+    if (tipo === "ativos") {
+        return (
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={classe}>
+                <path d="M7 3h10v4H7zM6 5H4v16h16V5h-2" strokeWidth="1.8" strokeLinejoin="round" />
+                <path d="m8.5 14 2.3 2.3 4.8-5" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
+    if (tipo === "historico") {
+        return (
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={classe}>
+                <path d="M4.5 9A8 8 0 1 1 4 15M4.5 9V4.5M4.5 9H9" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M12 7.5V12l3 2" strokeWidth="1.8" strokeLinecap="round" />
+            </svg>
+        );
+    }
+    if (tipo === "movimentacoes") {
+        return (
+            <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={classe}>
+                <path d="M4 7h14m0 0-3-3m3 3-3 3M20 17H6m0 0 3 3m-3-3 3-3" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+        );
+    }
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className={classe}>
+            <path d="M10.2 4.2 2.7 17a2 2 0 0 0 1.7 3h15.2a2 2 0 0 0 1.7-3L13.8 4.2a2.1 2.1 0 0 0-3.6 0Z" strokeWidth="1.8" strokeLinejoin="round" />
+            <path d="M12 9v4M12 16.5v.1" strokeWidth="2" strokeLinecap="round" />
+        </svg>
+    );
+}
 
 export default function Exportacao() {
     const [inicio, setInicio] = useState("");
@@ -132,88 +232,126 @@ export default function Exportacao() {
         }
     };
 
-    const opcoes: Array<[TipoExportacao, string, string]> = [
-        ["acervo", "Acervo atual", "Todos os exemplares cadastrados e seus status atuais."],
-        ["ativos", "Empréstimos ativos", "Empréstimos em aberto dentro do período selecionado."],
-        ["historico", "Histórico de empréstimos", "Todos os empréstimos, incluindo os já devolvidos."],
-        ["movimentacoes", "Movimentações", "Livros adicionados, empréstimos, devoluções e exclusões."],
-        ["atrasados", "Empréstimos atrasados", "Empréstimos vencidos dentro do período selecionado."],
-    ];
-
     return (
-        <div className="flex min-h-screen bg-white font-sans">
-            <aside className="w-64 p-6 border-r-8 border-gray-300">
-                <nav className="flex flex-col gap-5 text-xl text-gray-800">
-                    <Link to="/">Home</Link>
-                    <Link to="/acervo">Acervo</Link>
-                    <Link to="/emprestimos">Empréstimos</Link>
-                    <Link to="/aluno">Alunos</Link>
-                    <Link className="font-semibold text-cyan-600" to="/exportacao">
-                        Exportação de dados
-                    </Link>
-                    <Link to="/debug">Debug</Link>
-                    <Link to="/configuracoes">Configurações</Link>
-                </nav>
-            </aside>
-            <main className="flex-1 p-10 max-w-5xl">
-                <h1 className="text-4xl font-semibold mb-3">Exportação de dados</h1>
-                <p className="text-gray-600 mb-8">
-                    Escolha um período e baixe a planilha desejada no formato Excel.
-                </p>
+        <div className="flex min-h-screen bg-[#eaf0f6] font-sans">
+            <Sidebar />
+            <main className="flex-1 overflow-y-auto p-8 xl:p-10">
+                <div className="mx-auto max-w-5xl">
+                    <header className="mb-7 rounded-3xl border border-cyan-300 bg-gradient-to-r from-cyan-200 via-sky-100 to-blue-100 p-6 shadow-[0_12px_30px_rgba(8,145,178,0.13)]">
+                        <p className="mb-1 text-sm font-semibold tracking-[0.18em] text-cyan-700">RELATÓRIOS</p>
+                        <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Exportação de dados</h1>
+                        <p className="mt-2 text-slate-600">Escolha um período e baixe a planilha desejada no formato Excel.</p>
+                    </header>
 
-                <section className="p-5 bg-slate-100 rounded-lg mb-8">
-                    <label className="flex items-center gap-2 mb-4">
-                        <input
-                            type="checkbox"
-                            checked={todoPeriodo}
-                            onChange={(evento) => setTodoPeriodo(evento.target.checked)}
-                        />
-                        Todo o período
-                    </label>
-                    {!todoPeriodo && (
-                        <div className="flex flex-wrap gap-4">
-                            <label>
-                                Data inicial
+                    <section className="mb-8 overflow-hidden rounded-2xl border border-cyan-300 bg-cyan-50 shadow-[0_8px_24px_rgba(8,145,178,0.1)]">
+                        <div className="flex flex-wrap items-center justify-between gap-4 border-b border-cyan-200 bg-cyan-100/80 p-5 sm:p-6">
+                            <div className="flex items-center gap-3">
+                                <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-cyan-100 text-cyan-800">
+                                    <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6">
+                                        <rect x="3" y="5" width="18" height="16" rx="2" strokeWidth="1.8" />
+                                        <path d="M8 3v4M16 3v4M3 10h18" strokeWidth="1.8" strokeLinecap="round" />
+                                    </svg>
+                                </span>
+                                <div>
+                                    <h2 className="text-lg font-semibold text-slate-900">Período dos dados</h2>
+                                    <p className="text-sm text-slate-500">Defina o intervalo que será incluído no arquivo.</p>
+                                </div>
+                            </div>
+                            <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-cyan-300 bg-white/80 px-4 py-2.5 shadow-sm">
+                                <span className="text-sm font-semibold text-slate-700">Todo o período</span>
                                 <input
-                                    type="date"
-                                    className="block border rounded p-2 mt-1 bg-white"
-                                    value={inicio}
-                                    max={fim || undefined}
-                                    onChange={(evento) => setInicio(evento.target.value)}
+                                    type="checkbox"
+                                    className="peer sr-only"
+                                    checked={todoPeriodo}
+                                    onChange={(evento) => setTodoPeriodo(evento.target.checked)}
                                 />
-                            </label>
-                            <label>
-                                Data final
-                                <input
-                                    type="date"
-                                    className="block border rounded p-2 mt-1 bg-white"
-                                    value={fim}
-                                    min={inicio || undefined}
-                                    onChange={(evento) => setFim(evento.target.value)}
-                                />
+                                <span className="relative h-6 w-11 rounded-full bg-slate-300 transition peer-checked:bg-cyan-700 after:absolute after:left-1 after:top-1 after:h-4 after:w-4 after:rounded-full after:bg-white after:shadow-sm after:transition-transform peer-checked:after:translate-x-5" />
                             </label>
                         </div>
-                    )}
-                    <p className="text-sm text-gray-500 mt-4">
-                        O período filtra empréstimos pela data de registro e movimentações pela data do evento.
-                        O acervo atual sempre representa a situação de hoje.
-                    </p>
-                </section>
 
-                <div className="grid md:grid-cols-2 gap-4">
-                    {opcoes.map(([tipo, titulo, texto]) => (
-                        <button
-                            key={tipo}
-                            disabled={exportando !== null}
-                            onClick={() => exportar(tipo, titulo)}
-                            className="text-left p-5 border rounded-lg hover:border-green-700 hover:bg-green-50 disabled:opacity-50"
-                        >
-                            <strong className="text-xl block">
-                                {exportando === tipo ? "Gerando planilha..." : titulo}
-                            </strong>
-                            <span className="text-gray-600">{texto}</span>
-                        </button>
-                    ))}
+                        <div className="p-5 sm:p-6">
+                            {!todoPeriodo ? (
+                                <div className="flex flex-wrap gap-4">
+                                    <label className="min-w-52 flex-1 text-sm font-semibold text-slate-700">
+                                        Data inicial
+                                        <input
+                                            type="date"
+                                            className="mt-1.5 block w-full rounded-xl border border-slate-400 bg-white px-3.5 py-2.5 shadow-sm outline-none transition focus:border-cyan-700 focus:ring-4 focus:ring-cyan-200"
+                                            value={inicio}
+                                            max={fim || undefined}
+                                            onChange={(evento) => setInicio(evento.target.value)}
+                                        />
+                                    </label>
+                                    <label className="min-w-52 flex-1 text-sm font-semibold text-slate-700">
+                                        Data final
+                                        <input
+                                            type="date"
+                                            className="mt-1.5 block w-full rounded-xl border border-slate-400 bg-white px-3.5 py-2.5 shadow-sm outline-none transition focus:border-cyan-700 focus:ring-4 focus:ring-cyan-200"
+                                            value={fim}
+                                            min={inicio || undefined}
+                                            onChange={(evento) => setFim(evento.target.value)}
+                                        />
+                                    </label>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2 rounded-xl bg-cyan-50 px-4 py-3 text-sm text-cyan-900">
+                                    <span className="flex h-5 w-5 items-center justify-center rounded-full bg-cyan-700 text-xs font-bold text-white">✓</span>
+                                    A planilha reunirá todos os registros disponíveis no sistema.
+                                </div>
+                            )}
+                            <p className="mt-4 text-sm leading-relaxed text-slate-500">
+                                O período filtra empréstimos pela data de registro e movimentações pela data do evento. O acervo atual sempre representa a situação de hoje.
+                            </p>
+                        </div>
+                    </section>
+
+                    <section className="rounded-2xl border border-slate-300 bg-slate-200/70 p-5 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+                    <div className="mb-4 flex flex-wrap items-end justify-between gap-2">
+                        <div>
+                            <h2 className="text-2xl font-semibold text-slate-900">Planilhas disponíveis</h2>
+                            <p className="mt-1 text-sm text-slate-500">Selecione um relatório para gerar o arquivo .xlsx.</p>
+                        </div>
+                        <span className="rounded-full border border-sky-200 bg-sky-100 px-3 py-1.5 text-xs font-semibold text-slate-700">
+                            {opcoes.length} opções
+                        </span>
+                    </div>
+
+                    <div className="grid gap-4 md:grid-cols-2">
+                        {opcoes.map((opcao) => {
+                            const gerando = exportando === opcao.tipo;
+                            return (
+                                <button
+                                    key={opcao.tipo}
+                                    type="button"
+                                    disabled={exportando !== null}
+                                    onClick={() => exportar(opcao.tipo, opcao.titulo)}
+                                    className={`group flex min-h-56 cursor-pointer flex-col rounded-2xl border p-5 text-left shadow-sm transition hover:-translate-y-0.5 hover:border-cyan-500 hover:shadow-lg disabled:cursor-wait disabled:opacity-60 disabled:hover:translate-y-0 ${opcao.fundoCard}`}
+                                >
+                                    <div className="mb-5 flex items-start justify-between gap-4">
+                                        <span className={`flex h-12 w-12 items-center justify-center rounded-xl ${opcao.fundoIcone} ${opcao.corIcone}`}>
+                                            {gerando ? (
+                                                <span className="h-5 w-5 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            ) : (
+                                                <IconeExportacao tipo={opcao.tipo} />
+                                            )}
+                                        </span>
+                                        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-bold uppercase tracking-wide text-slate-500">
+                                            {opcao.categoria}
+                                        </span>
+                                    </div>
+                                    <strong className="text-xl font-semibold text-slate-900">
+                                        {gerando ? "Gerando planilha..." : opcao.titulo}
+                                    </strong>
+                                    <span className="mt-2 flex-1 text-sm leading-relaxed text-slate-600">{opcao.descricao}</span>
+                                    <span className="mt-5 flex items-center justify-between border-t border-slate-100 pt-4 text-sm font-semibold text-cyan-800">
+                                        <span>{gerando ? "Preparando arquivo" : "Baixar planilha Excel"}</span>
+                                        <span aria-hidden="true" className="text-lg transition-transform group-hover:translate-x-1">→</span>
+                                    </span>
+                                </button>
+                            );
+                        })}
+                    </div>
+                    </section>
                 </div>
             </main>
         </div>

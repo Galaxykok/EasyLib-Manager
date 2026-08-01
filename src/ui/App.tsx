@@ -62,6 +62,7 @@ declare global {
             limparDados: (tipo: "movimentacoes" | "emprestimos" | "alunos" | "acervo") => Promise<{ success: boolean; quantidade?: number; error?: string }>;
             obterConfiguracao: () => Promise<{ success: boolean; data?: Configuracao; error?: string }>;
             salvarConfiguracao: (dados: Configuracao) => Promise<{ success: boolean; data?: Configuracao; error?: string }>;
+            obterDashboard: () => Promise<{ success: boolean; data?: Dashboard; error?: string }>;
         };
     }
     interface Aluno {
@@ -98,6 +99,8 @@ declare global {
         modeloTermo: string;
         paresTermosPorFolha: number;
         tipoFolha: "A4" | "CARTA" | "OFICIO";
+        painelDebugAtivo: boolean;
+        modoEscuro: boolean;
     }
     interface TermoGerado {
         conteudo: string;
@@ -107,6 +110,19 @@ declare global {
         criadoEm: string;
         paresTermosPorFolha: number;
         tipoFolha: "A4" | "CARTA" | "OFICIO";
+    }
+    interface DashboardDestaque {
+        nome: string;
+        total: number;
+    }
+    interface Dashboard {
+        emprestimosMes: number;
+        emprestimosHoje: number;
+        ativos: number;
+        atrasados: number;
+        livroFavorito?: DashboardDestaque;
+        serieDestaque?: DashboardDestaque;
+        alunoDestaque?: DashboardDestaque;
     }
 }
 

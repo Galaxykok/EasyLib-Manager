@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import { Link } from "react-router-dom";
 import "./App.css";
+import Sidebar from "./sidebar.tsx";
 
 interface Aluno {
     id: number;
@@ -61,7 +61,14 @@ export default function Alunos() {
     };
 
     useEffect(() => {
-        carregarAlunos();
+        window.electronAPI.obterAlunos().then((response) => {
+            if (response.success && response.data) {
+                setAlunosLista(response.data);
+            } else {
+                console.error("Erro ao carregar alunos:", response.error);
+            }
+            setIsLoading(false);
+        });
     }, []);
 
     const closeModal = (): void => {
@@ -111,69 +118,49 @@ export default function Alunos() {
     const turmaAnterior = () => setIndiceTurma((i) => Math.max(i - 1, 0));
 
     return (
-        <div className="flex h-screen w-screen bg-white font-sans overflow-hidden relative">
+        <div className="flex h-screen w-screen bg-[#eaf0f6] font-sans overflow-hidden relative">
+            <Sidebar />
 
-            <aside className="w-64 flex flex-col pt-16 relative bg-white flex-shrink-0">
-                <div className="absolute right-0 top-0 bottom-0 w-2 bg-gray-300" />
-                <nav className="flex flex-col gap-6 pl-6 z-10">
-                    <Link to="/" className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9">
-                        <span>Home</span>
-                    </Link>
-                    <Link to="/acervo" className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9">
-                        <span>Acervo</span>
-                    </Link>
-                    <Link to="/emprestimos" className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9">
-                        <span>Empréstimos</span>
-                    </Link>
-                    <Link to="/aluno" className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer">
-                        <span className="w-6 h-6 bg-cyan-400 block" />
-                        <span>Alunos</span>
-                    </Link>
-                    <Link
-                        to="/exportacao"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Exportação de dados</span>
-                    </Link>
-                    <Link
-                        to="/debug"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Debug</span>
-                    </Link>
-                    <Link
-                        to="/configuracoes"
-                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
-                    >
-                        <span>Configurações</span>
-                    </Link>
-                </nav>
-            </aside>
+            <main className="flex-1 flex flex-col items-center p-8 xl:p-10 bg-[#eaf0f6] overflow-y-auto">
+                <div className="w-full max-w-7xl flex flex-col min-h-full pb-2">
 
-            <main className="flex-1 flex flex-col items-center pt-8 px-12 bg-white overflow-y-auto">
-                <div className="w-full max-w-7xl flex flex-col h-full justify-between pb-8">
-
-                    <div>
-                        <h1 className="text-7xl font-normal text-center text-black mb-8 tracking-wide">
+                    <div className="contents">
+                        <header className="order-1 bg-gradient-to-r from-cyan-200 via-sky-100 to-blue-100 border border-cyan-300 rounded-3xl py-5 px-6 mb-5 shadow-[0_12px_30px_rgba(8,145,178,0.13)]">
+                        <p className="text-xs font-semibold tracking-[0.18em] text-cyan-700 mb-1">COMUNIDADE</p>
+                        <h1 className="text-4xl font-semibold text-slate-900 tracking-tight">
                             Alunos
                         </h1>
+                        <p className="text-sm text-slate-600 mt-1">Encontre estudantes e mantenha os dados de turma organizados.</p>
+                        </header>
 
-                        <div className="w-full bg-[#DCE2F4] border border-gray-600 rounded-md p-6 h-[60vh] flex flex-col gap-2 overflow-y-auto shadow-sm">
+                        <div className="order-3 w-full bg-slate-200/70 border border-slate-300 rounded-2xl p-3 min-h-[420px] flex flex-col gap-2 overflow-y-auto shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+                            <div className="sticky top-0 z-10 flex items-center justify-between gap-4 rounded-xl border border-sky-200 bg-sky-100 px-4 py-3 shadow-sm">
+                                <div>
+                                    <h2 className="font-semibold text-slate-900">Alunos encontrados</h2>
+                                    <p className="text-xs text-slate-600">Selecione um cadastro para consultar ou excluir o registro.</p>
+                                </div>
+                                <span className="rounded-full bg-cyan-700 px-3 py-1 text-xs font-bold text-white">{alunosLista.length}</span>
+                            </div>
                             {isLoading ? (
                                 <div className="text-center text-gray-600 text-xl m-auto">Carregando alunos...</div>
                             ) : alunosLista.length === 0 ? (
                                 <div className="text-center text-gray-500 text-xl m-auto">Nenhum aluno cadastrado.</div>
                             ) : (
                                 <div className="flex flex-col gap-2">
+                                    <div className="grid grid-cols-[70px_minmax(0,1fr)_160px] gap-4 px-4 py-2 text-[11px] font-semibold tracking-[0.12em] text-slate-600 uppercase">
+                                        <span>Código</span>
+                                        <span>Aluno</span>
+                                        <span className="text-right">Turma</span>
+                                    </div>
                                     {alunosLista.map((aluno) => (
                                         <div 
                                             key={aluno.id} 
                                             onClick={() => setSelectedAluno(aluno)}
-                                            className="flex justify-between items-center bg-white border border-gray-300 p-4 rounded shadow-sm hover:border-cyan-500 hover:shadow-md transition-all cursor-pointer"
+                                            className="grid grid-cols-[70px_minmax(0,1fr)_160px] gap-4 items-center bg-sky-50 border border-sky-200 p-4 rounded-xl shadow-sm hover:border-cyan-500 hover:bg-cyan-50 hover:shadow-md transition-all cursor-pointer"
                                         >
-                                            <span className='text-xl font-medium text-cyan-500 rounded-full'>{aluno.id}</span>
-                                            <span className="text-xl font-medium text-gray-800">{aluno.nome}</span>
-                                            <span className="bg-cyan-100 text-cyan-800 font-semibold px-3 py-1 rounded-full text-sm">
+                                            <span className="w-fit font-mono text-xs font-semibold text-cyan-800 bg-cyan-50 border border-cyan-100 px-2.5 py-1.5 rounded-lg">{aluno.id}</span>
+                                            <span className="text-lg font-semibold text-slate-800 truncate">{aluno.nome}</span>
+                                            <span className="justify-self-end bg-cyan-100 text-cyan-800 font-semibold px-3 py-1 rounded-full text-sm">
                                                 {aluno.serie}
                                             </span>
                                         </div>
@@ -183,29 +170,32 @@ export default function Alunos() {
                         </div>
                     </div>
                     
-                    <div className="w-full flex items-center justify-between mt-6">
-                        <div className="flex items-center gap-2">
+                    <div className="order-2 w-full flex items-end justify-between gap-4 mb-5 bg-cyan-100/80 border border-cyan-300 p-4 rounded-2xl shadow-[0_8px_24px_rgba(8,145,178,0.1)]">
+                        <div className="flex min-w-0 flex-col gap-1.5">
+                            <span className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-900">Localizar estudante</span>
+                            <div className="flex items-center gap-2">
                             <input
                                 id="pesquisarAluno"
                                 type="text"
                                 placeholder="Pesquisar aluno..."
-                                className="w-80 px-4 py-3 text-lg border border-gray-400 rounded-md bg-white text-gray-700 placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-gray-500"
+                                className="w-80 px-4 py-2.5 border border-slate-400 rounded-xl bg-white text-slate-800 shadow-sm outline-none placeholder-slate-400 focus:border-cyan-700 focus:ring-4 focus:ring-cyan-200"
                                 value={aluno}
                                 onChange={(e) => setAluno(e.target.value)}
                             />
                             <button
                                 type="button"
                                 onClick={() => {carregarAlunos()}}
-                                className="flex items-center justify-center bg-[#006414] hover:bg-green-800 text-white p-3.5 rounded-md shadow transition-colors cursor-pointer"
+                                className="flex items-center justify-center bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer"
                                 title="Pesquisar"
                             >
                                 Pesquisar
                             </button>
+                            </div>
                         </div>
 
                         <button
                             onClick={() => setIsModalOpen(true)}
-                            className="flex items-center gap-2 bg-[#006414] hover:bg-green-800 text-white font-normal text-lg px-6 py-3 rounded shadow transition-colors cursor-pointer"
+                            className="flex items-center gap-2 bg-green-700 hover:bg-green-800 text-white font-semibold px-5 py-2.5 rounded-xl shadow-sm transition-colors cursor-pointer"
                         >
                             <span>+ Cadastrar Aluno</span>
                         </button>
@@ -216,7 +206,7 @@ export default function Alunos() {
 
             {isModalOpen && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-xl shadow-2xl border border-gray-200 relative">
+                    <div className="bg-sky-50 rounded-2xl p-8 w-full max-w-xl shadow-2xl border border-cyan-200 relative">
                         <button
                             onClick={closeModal}
                             className="absolute top-4 right-4 text-gray-500 hover:text-gray-800 text-2xl font-bold focus:outline-none cursor-pointer"
@@ -229,13 +219,13 @@ export default function Alunos() {
                             <form onSubmit={handleCadastroSubmit} className="space-y-4">
                                 <div className="flex flex-col gap-1">
                                     <label className="text-sm font-medium text-gray-700">Nome do Aluno</label>
-                                    <input required type="text" name="nome" value={formData.nome} onChange={handleInputChange} className="border border-gray-300 rounded p-2.5 focus:outline-none focus:ring-2 focus:ring-green-600" />
+                                    <input required type="text" name="nome" value={formData.nome} onChange={handleInputChange} className="border border-slate-400 bg-white rounded-xl p-2.5 shadow-sm focus:outline-none focus:ring-4 focus:ring-cyan-200 focus:border-cyan-700" />
                                 </div>
 
                                 <div className="flex flex-col items-center w-full">
                                     <label className="mb-2 text-sm font-medium text-gray-700">Turma do Aluno</label>
                                     <div className="relative w-64">
-                                        <input readOnly value={turmas[indiceTurma]} className="w-full h-10 border rounded px-3 pr-10" />
+                                        <input readOnly value={turmas[indiceTurma]} className="w-full h-10 border border-slate-400 bg-white rounded-xl px-3 pr-10 shadow-sm" />
                                         <div className="absolute right-0 top-0 h-10 w-10 flex flex-col border-l bg-white">
                                             <button type="button" onClick={proximaTurma} className="h-5 flex items-center justify-center hover:bg-gray-100">▲</button>
                                             <button type="button" onClick={turmaAnterior} className="h-5 flex items-center justify-center hover:bg-gray-100 border-t">▼</button>
@@ -245,7 +235,7 @@ export default function Alunos() {
 
                                 <div className="flex gap-4 justify-center mt-6 pt-4 border-t border-gray-100">
                                     <button type="button" onClick={closeModal} className="px-5 py-2.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded transition-colors cursor-pointer">Cancelar</button>
-                                    <button type="submit" className="px-6 py-2.5 bg-[#006414] hover:bg-green-800 text-white font-medium rounded shadow transition-colors cursor-pointer">Cadastrar Aluno</button>
+                                    <button type="submit" className="px-6 py-2.5 bg-green-700 hover:bg-green-800 text-white font-semibold rounded-xl shadow-sm transition-colors cursor-pointer">Cadastrar Aluno</button>
                                 </div>
                             </form>
                         </div>
@@ -255,11 +245,11 @@ export default function Alunos() {
 
             {selectedAluno && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50">
-                    <div className="bg-white rounded-lg p-8 w-full max-w-md shadow-2xl border border-gray-200 relative">
+                    <div className="bg-sky-50 rounded-2xl p-8 w-full max-w-md shadow-2xl border border-cyan-200 relative">
                         <div>
                             <h2 className="text-2xl font-bold text-gray-800 mb-6 text-center">Informações do Registro</h2>
                             
-                            <div className="space-y-4 mb-8 bg-gray-50 p-4 rounded-md border border-gray-200">
+                            <div className="space-y-4 mb-8 bg-sky-100/70 p-4 rounded-xl border border-sky-200">
                                 <p className="text-base text-gray-700"><strong>ID:</strong> {selectedAluno.id}</p>
                                 <p className="text-base text-gray-700"><strong>Nome:</strong> {selectedAluno.nome}</p>
                                 <p className="text-base text-gray-700"><strong>Série / Turma:</strong> {selectedAluno.serie}</p>
@@ -287,7 +277,7 @@ export default function Alunos() {
             )}
             {showDeleteModal && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[60]">
-                    <div className="bg-white rounded-lg p-6 w-full max-w-md shadow-xl">
+                    <div className="bg-rose-50 rounded-2xl p-6 w-full max-w-md shadow-xl border border-rose-200">
                         <h2 className="text-2xl font-semibold text-red-600 mb-4">
                             Confirmar exclusão
                         </h2>
