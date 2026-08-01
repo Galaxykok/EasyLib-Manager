@@ -20,4 +20,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     limparLogsDebug: () => ipcRenderer.invoke("limpar-logs-debug"),
     copiarLogsDebug: () => ipcRenderer.invoke("copiar-logs-debug"),
     limparDados: (tipo: "movimentacoes" | "emprestimos" | "alunos" | "acervo") => ipcRenderer.invoke("limpar-dados", tipo),
+    obterConfiguracao: () => ipcRenderer.invoke("obter-configuracao"),
+    salvarConfiguracao: (dados: any) => ipcRenderer.invoke("salvar-configuracao", dados),
 });

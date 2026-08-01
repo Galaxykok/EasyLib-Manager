@@ -1,1 +1,60 @@
 @import "tailwindcss";
+
+.folha-termos {
+    width: var(--largura-folha);
+    height: var(--altura-folha);
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    overflow: hidden;
+}
+
+.par-termos {
+    height: var(--altura-par);
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    border-top: 1px dashed #777;
+}
+
+.termo-via-compacto {
+    min-width: 0;
+    overflow: hidden;
+    padding: 4mm 5mm;
+    border-right: 1px dashed #777;
+}
+
+.termo-via-compacto:last-child {
+    border-right: 0;
+}
+
+.rotulo-via {
+    margin-bottom: 2mm;
+    color: #666;
+    font-size: 7pt;
+    text-align: right;
+}
+
+.conteudo-termo-compacto {
+    white-space: pre-wrap;
+    font-size: var(--fonte-termo);
+    line-height: 1.15;
+    text-align: justify;
+}
+
+@media print {
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        background: white !important;
+    }
+
+    .nao-imprimir {
+        display: none !important;
+    }
+
+    .folha-termos {
+        margin: 0 !important;
+        box-shadow: none !important;
+    }
+}

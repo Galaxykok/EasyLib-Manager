@@ -5,8 +5,39 @@ import { StatusEmprestimo, StatusLivro, TipoLeitor, TipoMovimentacao } from "@pr
 
 type LivroEntrada = { titulo: string; autor?: string | null; numeroEdicao?: number | null; isbn?: string | null; editora?: string | null; unidade?: number };
 type LeitorEntrada = { id?: number; nome: string; serie?: string; tipo?: "ALUNO" | "PROFESSOR" };
-type EmprestimoEntrada = { leitor: LeitorEntrada; livros: number[]; dataDevolucaoPrevista?: string | Date | null };
+type EmprestimoEntrada = { leitor: LeitorEntrada; livros: number[]; estadosLivros?: Record<string, string>; dataDevolucaoPrevista?: string | Date | null };
 type LogDebug = { id: number; dataHora: string; origem: string; mensagem: string; detalhes?: string };
+type ConfiguracaoEntrada = { termoResponsabilidadeAtivo: boolean; responsavelBiblioteca: string; modeloTermo: string; paresTermosPorFolha?: number; tipoFolha?: string };
+
+const MODELO_TERMO_PADRAO = `TERMO DE RESPONSABILIDADE PELO EMPRÉSTIMO DE LIVRO
+
+Eu, {{nome_aluno}}, da turma/série {{serie_aluno}}, declaro ter recebido o(s) livro(s) abaixo relacionado(s), comprometendo-me a conservá-lo(s) e devolvê-lo(s) até {{data_devolucao}} nas mesmas condições em que foi(ram) recebido(s).
+
+Livro(s) e estado de conservação:
+{{livros}}
+
+Empréstimo realizado em {{data}}, às {{hora}}.
+
+Responsável pela biblioteca: {{responsavel_biblioteca}}
+
+
+____________________________________
+Assinatura do aluno
+
+
+____________________________________
+Assinatura do responsável pela biblioteca`;
+
+const substituirVariaveis = (modelo: string, valores: Record<string, string>) =>
+  Object.entries(valores).reduce(
+    (texto, [variavel, valor]) => texto.replaceAll(`{{${variavel}}}`, valor),
+    modelo,
+  );
+
+const converterData = (valor: string | Date) =>
+  typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)
+    ? new Date(`${valor}T12:00:00`)
+    : new Date(valor);
 const logsDebug: LogDebug[] = [];
 let proximoLogId = 1;
 const registrarErro = (origem: string, mensagem: string, detalhes?: string) => {
@@ -40,6 +71,64 @@ ipcMain.handle("copiar-logs-debug", () => {
     .join("\n\n");
   clipboard.writeText(texto);
   return { success: true, quantidade: logsDebug.length };
+});
+ipcMain.handle("obter-configuracao", async () => {
+  try {
+    const configuracao = await prisma.configuracao.upsert({
+      where: { id: 1 },
+      update: {},
+      create: {
+        id: 1,
+        termoResponsabilidadeAtivo: true,
+        responsavelBiblioteca: "",
+        modeloTermo: MODELO_TERMO_PADRAO,
+        paresTermosPorFolha: 2,
+        tipoFolha: "A4",
+      },
+    });
+    return {
+      success: true,
+      data: {
+        ...configuracao,
+        modeloTermo: configuracao.modeloTermo || MODELO_TERMO_PADRAO,
+      },
+    };
+  } catch (e) {
+    return erro(e);
+  }
+});
+ipcMain.handle("salvar-configuracao", async (_event, dados: ConfiguracaoEntrada) => {
+  try {
+    const responsavelBiblioteca = String(dados.responsavelBiblioteca || "").trim();
+    const paresTermosPorFolha = Math.min(4, Math.max(1, Math.floor(Number(dados.paresTermosPorFolha) || 2)));
+    const tipoFolha = ["A4", "CARTA", "OFICIO"].includes(String(dados.tipoFolha))
+      ? String(dados.tipoFolha)
+      : "A4";
+    if (dados.termoResponsabilidadeAtivo && !responsavelBiblioteca) {
+      return { success: false, error: "Informe o nome do responsável pela biblioteca." };
+    }
+    const data = await prisma.configuracao.upsert({
+      where: { id: 1 },
+      update: {
+        termoResponsabilidadeAtivo: Boolean(dados.termoResponsabilidadeAtivo),
+        responsavelBiblioteca,
+        modeloTermo: String(dados.modeloTermo || "").trim() || MODELO_TERMO_PADRAO,
+        paresTermosPorFolha,
+        tipoFolha,
+      },
+      create: {
+        id: 1,
+        termoResponsabilidadeAtivo: Boolean(dados.termoResponsabilidadeAtivo),
+        responsavelBiblioteca,
+        modeloTermo: String(dados.modeloTermo || "").trim() || MODELO_TERMO_PADRAO,
+        paresTermosPorFolha,
+        tipoFolha,
+      },
+    });
+    return { success: true, data };
+  } catch (e) {
+    return erro(e);
+  }
 });
 ipcMain.handle("limpar-dados", async (_event, tipo: "movimentacoes" | "emprestimos" | "alunos" | "acervo") => {
   try {
@@ -166,14 +255,27 @@ ipcMain.handle("delete-livro", async (_event, livro: { id: number }) => { try { 
 ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) => { try {
   if (!dados.leitor.nome?.trim() || !dados.livros?.length) return { success: false, error: "Informe o leitor e ao menos um exemplar." };
   const idsLivros = [...new Set(dados.livros)];
+  if (idsLivros.some((id) => !String(dados.estadosLivros?.[String(id)] || "").trim())) {
+    return { success: false, error: "Informe o estado de conservação de todos os livros selecionados." };
+  }
+  const agora = new Date();
   const data = await prisma.$transaction(async (tx) => {
     const leitor = dados.leitor.id ? await tx.aluno.findUnique({ where: { id: dados.leitor.id } }) : await tx.aluno.findFirst({ where: { nome: { equals: dados.leitor.nome.trim() }, tipo: dados.leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO } });
     const pessoa = leitor ?? await tx.aluno.create({ data: { nome: dados.leitor.nome.trim(), serie: dados.leitor.serie?.trim() || "", tipo: dados.leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO } });
     const livros = await tx.livro.findMany({ where: { id: { in: idsLivros } } });
     if (livros.length !== idsLivros.length) throw new Error("Um ou mais livros selecionados não foram encontrados.");
+    const configuracao = await tx.configuracao.upsert({
+      where: { id: 1 },
+      update: {},
+      create: { id: 1, termoResponsabilidadeAtivo: true, responsavelBiblioteca: "", modeloTermo: MODELO_TERMO_PADRAO, paresTermosPorFolha: 2, tipoFolha: "A4" },
+    });
+    if (configuracao.termoResponsabilidadeAtivo && !configuracao.responsavelBiblioteca.trim()) {
+      throw new Error("Configure o nome do responsável pela biblioteca antes de gerar o termo.");
+    }
     const emprestimos = [];
     for (const livro of livros) {
-      const emprestimo = await tx.emprestimo.create({ data: { alunoId: pessoa.id, livroId: livro.id, dataDevolucaoPrevista: dados.dataDevolucaoPrevista ? new Date(dados.dataDevolucaoPrevista) : null } });
+      const estadoLivro = String(dados.estadosLivros?.[String(livro.id)] || "").trim();
+      const emprestimo = await tx.emprestimo.create({ data: { alunoId: pessoa.id, livroId: livro.id, estadoLivro, dataHoraEmprestimo: agora, dataDevolucaoPrevista: dados.dataDevolucaoPrevista ? converterData(dados.dataDevolucaoPrevista) : null } });
       emprestimos.push(emprestimo);
       const restantes = livro.disponiveis - 1;
       await tx.livro.update({
@@ -185,7 +287,34 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
       });
       await tx.movimentacao.create({ data: { tipo: TipoMovimentacao.EMPRESTIMO_CRIADO, alunoId: pessoa.id, livroId: livro.id, descricao: `${pessoa.tipo === TipoLeitor.PROFESSOR ? "Professor" : "Aluno"} ${pessoa.nome} emprestou: ${livro.titulo} (${restantes} disponíveis)` } });
     }
-    return { pessoa, emprestimos };
+    const listaLivros = livros
+      .map((livro, indice) => `${indice + 1}. ${livro.titulo} — Estado: ${String(dados.estadosLivros?.[String(livro.id)] || "Não informado")}`)
+      .join("\n");
+    const dataDevolucao = dados.dataDevolucaoPrevista
+      ? converterData(dados.dataDevolucaoPrevista).toLocaleDateString("pt-BR")
+      : "data a combinar";
+    const termo = configuracao.termoResponsabilidadeAtivo
+      ? {
+          conteudo: substituirVariaveis(configuracao.modeloTermo || MODELO_TERMO_PADRAO, {
+            nome_aluno: pessoa.nome,
+            serie_aluno: pessoa.serie || "Não informada",
+            tipo_leitor: pessoa.tipo === TipoLeitor.PROFESSOR ? "Professor" : "Aluno",
+            data: agora.toLocaleDateString("pt-BR"),
+            hora: agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }),
+            responsavel_biblioteca: configuracao.responsavelBiblioteca || "Não informado",
+            livros: listaLivros,
+            estado_livros: livros.map((livro) => String(dados.estadosLivros?.[String(livro.id)] || "Não informado")).join(", "),
+            data_devolucao: dataDevolucao,
+          }),
+          nomeAluno: pessoa.nome,
+          serieAluno: pessoa.serie,
+          responsavelBiblioteca: configuracao.responsavelBiblioteca,
+          criadoEm: agora.toISOString(),
+          paresTermosPorFolha: configuracao.paresTermosPorFolha,
+          tipoFolha: configuracao.tipoFolha as "A4" | "CARTA" | "OFICIO",
+        }
+      : undefined;
+    return { pessoa, emprestimos, termo };
   }); return { success: true, data };
 } catch (e) { return erro(e); } });
 

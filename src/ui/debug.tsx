@@ -108,6 +108,7 @@ export default function Debug() {
                     <Link to="/aluno">Alunos</Link>
                     <Link to="/exportacao">Exportação de dados</Link>
                     <Link className="font-semibold text-cyan-600" to="/debug">Debug</Link>
+                    <Link to="/configuracoes">Configurações</Link>
                 </nav>
             </aside>
             <main className="flex-1 p-8 overflow-y-auto flex flex-col">

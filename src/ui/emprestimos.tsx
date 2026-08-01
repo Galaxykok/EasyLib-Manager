@@ -1,10 +1,11 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 const formatarData = (valor: Date | string | null | undefined) =>
     valor ? new Date(valor).toLocaleDateString("pt-BR") : "Sem prazo";
 
 export default function Emprestimos() {
+    const navigate = useNavigate();
     const [lista, setLista] = useState<Emprestimo[]>([]);
     const [livros, setLivros] = useState<Livro[]>([]);
     const [nome, setNome] = useState("");
@@ -13,6 +14,7 @@ export default function Emprestimos() {
     const [leitorId, setLeitorId] = useState<number | undefined>();
     const [sugestoes, setSugestoes] = useState<Aluno[]>([]);
     const [selecionados, setSelecionados] = useState<number[]>([]);
+    const [estadosLivros, setEstadosLivros] = useState<Record<number, string>>({});
     const [prazo, setPrazo] = useState("");
     const [busca, setBusca] = useState("");
     const [buscaEmprestimos, setBuscaEmprestimos] = useState("");
@@ -62,19 +64,31 @@ export default function Emprestimos() {
             const resposta = await window.electronAPI.cadastrarEmprestimo({
                 leitor: { id: leitorId, nome, serie, tipo },
                 livros: selecionados,
+                estadosLivros,
                 dataDevolucaoPrevista: prazo || null,
             });
             if (!resposta.success) {
                 alert(`Erro ao registrar empréstimo: ${resposta.error}`);
+                if (resposta.error?.includes("responsável pela biblioteca")) {
+                    navigate("/configuracoes");
+                }
                 return;
             }
+            const termo = resposta.data?.termo as TermoGerado | undefined;
             setNome("");
             setSerie("");
             setLeitorId(undefined);
             setSelecionados([]);
+            setEstadosLivros({});
             setPrazo("");
             setSugestoes([]);
             await carregar();
+            if (
+                termo &&
+                window.confirm("Deseja imprimir o termo de responsabilidade?")
+            ) {
+                navigate("/termo-impressao", { state: { termo } });
+            }
         } finally {
             setSalvando(false);
         }
@@ -132,6 +146,7 @@ export default function Emprestimos() {
                     <Link to="/aluno">Alunos</Link>
                     <Link to="/exportacao">Exportação de dados</Link>
                     <Link to="/debug">Debug</Link>
+                    <Link to="/configuracoes">Configurações</Link>
                 </nav>
             </aside>
 
@@ -215,13 +230,20 @@ export default function Emprestimos() {
                                     <input
                                         type="checkbox"
                                         checked={selecionados.includes(livro.id)}
-                                        onChange={() =>
+                                        onChange={() => {
+                                            const estaSelecionado = selecionados.includes(livro.id);
                                             setSelecionados((atuais) =>
-                                                atuais.includes(livro.id)
+                                                estaSelecionado
                                                     ? atuais.filter((id) => id !== livro.id)
                                                     : [...atuais, livro.id],
-                                            )
-                                        }
+                                            );
+                                            setEstadosLivros((atuais) => {
+                                                const novos = { ...atuais };
+                                                if (estaSelecionado) delete novos[livro.id];
+                                                else novos[livro.id] = "";
+                                                return novos;
+                                            });
+                                        }}
                                     />
                                     <span>
                                         {livro.titulo}{" "}
@@ -239,9 +261,42 @@ export default function Emprestimos() {
                                 <p className="text-gray-500 p-2">Nenhum exemplar disponível.</p>
                             )}
                         </div>
+                        {selecionados.length > 0 && (
+                            <div className="mt-4 border-t pt-4 space-y-3">
+                                <h3 className="font-semibold">Estado de conservação no empréstimo</h3>
+                                {selecionados.map((livroId) => {
+                                    const livroSelecionado = livros.find((livro) => livro.id === livroId);
+                                    if (!livroSelecionado) return null;
+                                    return (
+                                        <label key={livroId} className="block text-sm">
+                                            <span className="font-medium">{livroSelecionado.titulo}</span>
+                                            <input
+                                                type="text"
+                                                value={estadosLivros[livroId] || ""}
+                                                onChange={(evento) => setEstadosLivros((atuais) => ({ ...atuais, [livroId]: evento.target.value }))}
+                                                placeholder="Descreva o estado do livro"
+                                                className="block w-full border rounded p-2 mt-1 bg-white"
+                                            />
+                                            <span className="flex flex-wrap gap-1.5 mt-2">
+                                                {["Novo", "Bom estado", "Marcas de uso", "Danificado"].map((estado) => (
+                                                    <button
+                                                        type="button"
+                                                        key={estado}
+                                                        onClick={() => setEstadosLivros((atuais) => ({ ...atuais, [livroId]: estado }))}
+                                                        className="px-2.5 py-1 rounded bg-slate-100 hover:bg-slate-200 text-gray-700 cursor-pointer"
+                                                    >
+                                                        {estado}
+                                                    </button>
+                                                ))}
+                                            </span>
+                                        </label>
+                                    );
+                                })}
+                            </div>
+                        )}
                         <button
                             type="button"
-                            disabled={!nome.trim() || !selecionados.length || salvando}
+                            disabled={!nome.trim() || !selecionados.length || selecionados.some((id) => !estadosLivros[id]) || salvando}
                             onClick={salvar}
                             className="mt-4 bg-green-700 hover:bg-green-800 text-white rounded px-5 py-2 disabled:bg-gray-400 cursor-pointer disabled:cursor-not-allowed"
                         >
