@@ -2,12 +2,13 @@ import { app, BrowserWindow, clipboard, ipcMain } from "electron";
 import path from "path";
 import { prisma } from "../../lib/prisma.ts";
 import { StatusEmprestimo, StatusLivro, TipoLeitor, TipoMovimentacao } from "@prisma/client";
+import { chaveSerie, normalizarSerie } from "../shared/normalizacao.ts";
 
 type LivroEntrada = { titulo: string; autor?: string | null; numeroEdicao?: number | null; isbn?: string | null; editora?: string | null; unidade?: number };
 type LeitorEntrada = { id?: number; nome: string; serie?: string; tipo?: "ALUNO" | "PROFESSOR" };
 type EmprestimoEntrada = { leitor: LeitorEntrada; livros: number[]; estadosLivros?: Record<string, string>; dataDevolucaoPrevista?: string | Date | null };
 type LogDebug = { id: number; dataHora: string; origem: string; mensagem: string; detalhes?: string };
-type ConfiguracaoEntrada = { termoResponsabilidadeAtivo: boolean; responsavelBiblioteca: string; modeloTermo: string; paresTermosPorFolha?: number; tipoFolha?: string };
+type ConfiguracaoEntrada = { termoResponsabilidadeAtivo: boolean; responsavelBiblioteca: string; modeloTermo: string; paresTermosPorFolha?: number; tipoFolha?: string; painelDebugAtivo?: boolean; modoEscuro?: boolean };
 
 const MODELO_TERMO_PADRAO = `TERMO DE RESPONSABILIDADE PELO EMPRÉSTIMO DE LIVRO
 
@@ -38,6 +39,7 @@ const converterData = (valor: string | Date) =>
   typeof valor === "string" && /^\d{4}-\d{2}-\d{2}$/.test(valor)
     ? new Date(`${valor}T12:00:00`)
     : new Date(valor);
+
 const logsDebug: LogDebug[] = [];
 let proximoLogId = 1;
 const registrarErro = (origem: string, mensagem: string, detalhes?: string) => {
@@ -84,6 +86,8 @@ ipcMain.handle("obter-configuracao", async () => {
         modeloTermo: MODELO_TERMO_PADRAO,
         paresTermosPorFolha: 2,
         tipoFolha: "A4",
+        painelDebugAtivo: true,
+        modoEscuro: false,
       },
     });
     return {
@@ -115,6 +119,8 @@ ipcMain.handle("salvar-configuracao", async (_event, dados: ConfiguracaoEntrada)
         modeloTermo: String(dados.modeloTermo || "").trim() || MODELO_TERMO_PADRAO,
         paresTermosPorFolha,
         tipoFolha,
+        painelDebugAtivo: Boolean(dados.painelDebugAtivo),
+        modoEscuro: Boolean(dados.modoEscuro),
       },
       create: {
         id: 1,
@@ -123,6 +129,8 @@ ipcMain.handle("salvar-configuracao", async (_event, dados: ConfiguracaoEntrada)
         modeloTermo: String(dados.modeloTermo || "").trim() || MODELO_TERMO_PADRAO,
         paresTermosPorFolha,
         tipoFolha,
+        painelDebugAtivo: Boolean(dados.painelDebugAtivo),
+        modoEscuro: Boolean(dados.modoEscuro),
       },
     });
     return { success: true, data };
@@ -189,7 +197,7 @@ ipcMain.handle("limpar-dados", async (_event, tipo: "movimentacoes" | "emprestim
 
 ipcMain.handle("obter-alunos", async () => { try { return { success: true, data: await prisma.aluno.findMany({ orderBy: { nome: "asc" } }) }; } catch (e) { return erro(e); } });
 ipcMain.handle("pesquisar-aluno", async (_event, nome: string) => { try { return { success: true, data: await prisma.aluno.findMany({ where: { nome: { contains: nome } }, take: 10, orderBy: { nome: "asc" } }) }; } catch (e) { return erro(e); } });
-ipcMain.handle("cadastrar-aluno", async (_event, leitor: LeitorEntrada) => { try { const data = await prisma.aluno.create({ data: { nome: leitor.nome.trim(), serie: leitor.serie?.trim() || "", tipo: leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO } }); return { success: true, data }; } catch (e) { return erro(e); } });
+ipcMain.handle("cadastrar-aluno", async (_event, leitor: LeitorEntrada) => { try { const data = await prisma.aluno.create({ data: { nome: leitor.nome.trim(), serie: normalizarSerie(leitor.serie), tipo: leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO } }); return { success: true, data }; } catch (e) { return erro(e); } });
 ipcMain.handle("delete-aluno", async (_event, leitor: { id: number }) => { try { return { success: true, data: await prisma.aluno.delete({ where: { id: leitor.id } }) }; } catch (e) { return erro(e); } });
 
 ipcMain.handle("obter-livros", async () => { try { return { success: true, data: await prisma.livro.findMany({ orderBy: { titulo: "asc" } }) }; } catch (e) { return erro(e); } });
@@ -260,14 +268,23 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
   }
   const agora = new Date();
   const data = await prisma.$transaction(async (tx) => {
-    const leitor = dados.leitor.id ? await tx.aluno.findUnique({ where: { id: dados.leitor.id } }) : await tx.aluno.findFirst({ where: { nome: { equals: dados.leitor.nome.trim() }, tipo: dados.leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO } });
-    const pessoa = leitor ?? await tx.aluno.create({ data: { nome: dados.leitor.nome.trim(), serie: dados.leitor.serie?.trim() || "", tipo: dados.leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO } });
+    const serieNormalizada = normalizarSerie(dados.leitor.serie);
+    const tipoLeitor = dados.leitor.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO;
+    const candidatos = dados.leitor.id
+      ? []
+      : await tx.aluno.findMany({
+          where: { nome: { equals: dados.leitor.nome.trim() }, tipo: tipoLeitor },
+        });
+    const leitor = dados.leitor.id
+      ? await tx.aluno.findUnique({ where: { id: dados.leitor.id } })
+      : candidatos.find((candidato) => chaveSerie(candidato.serie) === chaveSerie(serieNormalizada)) ?? null;
+    const pessoa = leitor ?? await tx.aluno.create({ data: { nome: dados.leitor.nome.trim(), serie: serieNormalizada, tipo: tipoLeitor } });
     const livros = await tx.livro.findMany({ where: { id: { in: idsLivros } } });
     if (livros.length !== idsLivros.length) throw new Error("Um ou mais livros selecionados não foram encontrados.");
     const configuracao = await tx.configuracao.upsert({
       where: { id: 1 },
       update: {},
-      create: { id: 1, termoResponsabilidadeAtivo: true, responsavelBiblioteca: "", modeloTermo: MODELO_TERMO_PADRAO, paresTermosPorFolha: 2, tipoFolha: "A4" },
+      create: { id: 1, termoResponsabilidadeAtivo: true, responsavelBiblioteca: "", modeloTermo: MODELO_TERMO_PADRAO, paresTermosPorFolha: 2, tipoFolha: "A4", painelDebugAtivo: true, modoEscuro: false },
     });
     if (configuracao.termoResponsabilidadeAtivo && !configuracao.responsavelBiblioteca.trim()) {
       throw new Error("Configure o nome do responsável pela biblioteca antes de gerar o termo.");
@@ -344,6 +361,45 @@ ipcMain.handle("delete-emprestimo", async (_event, dado: { id: number; livroId: 
   });
   return { success: true, data };
 } catch (e) { return erro(e); } });
+ipcMain.handle("obter-dashboard", async () => {
+  try {
+    await atualizarAtrasos();
+    const agora = new Date();
+    const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const [emprestimosMes, ativos, atrasados] = await Promise.all([
+      prisma.emprestimo.findMany({
+        where: { dataHoraEmprestimo: { gte: inicioMes } },
+        include: { aluno: true, livro: true },
+      }),
+      prisma.emprestimo.count({ where: { status: StatusEmprestimo.ATIVO } }),
+      prisma.emprestimo.count({ where: { status: StatusEmprestimo.ATRASADO } }),
+    ]);
+
+    const maisFrequente = <T extends { nome: string; total: number }>(itens: T[]) =>
+      itens.sort((a, b) => b.total - a.total || a.nome.localeCompare(b.nome, "pt-BR"))[0];
+    const contar = (valores: string[]) => {
+      const contagem = new Map<string, number>();
+      valores.filter(Boolean).forEach((valor) => contagem.set(valor, (contagem.get(valor) || 0) + 1));
+      return maisFrequente([...contagem].map(([nome, total]) => ({ nome, total })));
+    };
+
+    return {
+      success: true,
+      data: {
+        emprestimosMes: emprestimosMes.length,
+        emprestimosHoje: emprestimosMes.filter((emprestimo) => emprestimo.dataHoraEmprestimo >= inicioHoje).length,
+        ativos,
+        atrasados,
+        livroFavorito: contar(emprestimosMes.map((emprestimo) => emprestimo.livro.titulo)),
+        serieDestaque: contar(emprestimosMes.map((emprestimo) => normalizarSerie(emprestimo.aluno.serie) || "Sem turma")),
+        alunoDestaque: contar(emprestimosMes.map((emprestimo) => emprestimo.aluno.nome)),
+      },
+    };
+  } catch (e) {
+    return erro(e);
+  }
+});
 ipcMain.handle("obter-exportacao", async (_event, inicio?: string, fim?: string) => {
   try {
     await atualizarAtrasos();
