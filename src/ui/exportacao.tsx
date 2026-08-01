@@ -104,6 +104,7 @@ export default function Exportacao() {
                             "Disponíveis atualmente": emprestimo.livro.disponiveis,
                             "Data do empréstimo": formatarData(emprestimo.dataHoraEmprestimo),
                             "Devolução prevista": formatarData(emprestimo.dataDevolucaoPrevista),
+                            "Estado no empréstimo": emprestimo.estadoLivro || "Não informado",
                             Status: rotulosStatus[emprestimo.status] || emprestimo.status,
                         }));
 
@@ -151,6 +152,7 @@ export default function Exportacao() {
                         Exportação de dados
                     </Link>
                     <Link to="/debug">Debug</Link>
+                    <Link to="/configuracoes">Configurações</Link>
                 </nav>
             </aside>
             <main className="flex-1 p-10 max-w-5xl">

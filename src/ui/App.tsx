@@ -5,6 +5,8 @@ import Emprestimos from "./emprestimos.tsx";
 import Alunos from "./alunos.tsx";
 import Exportacao from "./exportacao.tsx";
 import Debug from "./debug.tsx";
+import Configuracoes from "./configuracoes.tsx";
+import TermoResponsabilidade from "./termoResponsabilidade.tsx";
 import { StatusEmprestimo } from "./enum.ts";
 import { StatusLivro } from "./enum.ts";
 
@@ -58,6 +60,8 @@ declare global {
             limparLogsDebug: () => Promise<{ success: boolean }>;
             copiarLogsDebug: () => Promise<{ success: boolean; quantidade?: number }>;
             limparDados: (tipo: "movimentacoes" | "emprestimos" | "alunos" | "acervo") => Promise<{ success: boolean; quantidade?: number; error?: string }>;
+            obterConfiguracao: () => Promise<{ success: boolean; data?: Configuracao; error?: string }>;
+            salvarConfiguracao: (dados: Configuracao) => Promise<{ success: boolean; data?: Configuracao; error?: string }>;
         };
     }
     interface Aluno {
@@ -84,8 +88,25 @@ declare global {
         dataHoraEmprestimo: Date | string;
         dataDevolucaoPrevista: Date | string | null;
         status: StatusEmprestimo;
+        estadoLivro: string;
         aluno: Aluno;
         livro: Livro;
+    }
+    interface Configuracao {
+        termoResponsabilidadeAtivo: boolean;
+        responsavelBiblioteca: string;
+        modeloTermo: string;
+        paresTermosPorFolha: number;
+        tipoFolha: "A4" | "CARTA" | "OFICIO";
+    }
+    interface TermoGerado {
+        conteudo: string;
+        nomeAluno: string;
+        serieAluno: string;
+        responsavelBiblioteca: string;
+        criadoEm: string;
+        paresTermosPorFolha: number;
+        tipoFolha: "A4" | "CARTA" | "OFICIO";
     }
 }
 
@@ -98,6 +119,8 @@ export default function App() {
             <Route path="/aluno" element={<Alunos />} />
             <Route path="/exportacao" element={<Exportacao />} />
             <Route path="/debug" element={<Debug />} />
+            <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/termo-impressao" element={<TermoResponsabilidade />} />
         </Routes>
     );
 }

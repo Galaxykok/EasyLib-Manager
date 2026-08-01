@@ -40,10 +40,22 @@ model Emprestimo {
   dataHoraEmprestimo    DateTime         @default(now())
   dataDevolucaoPrevista DateTime?
   status                StatusEmprestimo @default(ATIVO)
+  estadoLivro           String           @default("")
   aluno                 Aluno            @relation(fields: [alunoId], references: [id])
   livro                 Livro            @relation(fields: [livroId], references: [id])
 
   @@map("emprestimos")
+}
+
+model Configuracao {
+  id                      Int     @id @default(1)
+  termoResponsabilidadeAtivo Boolean @default(true)
+  responsavelBiblioteca   String  @default("")
+  modeloTermo             String  @default("")
+  paresTermosPorFolha     Int     @default(2)
+  tipoFolha               String  @default("A4")
+
+  @@map("configuracoes")
 }
 
 model Movimentacao {

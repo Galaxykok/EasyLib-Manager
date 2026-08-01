@@ -141,6 +141,12 @@ export default function Alunos() {
                     >
                         <span>Debug</span>
                     </Link>
+                    <Link
+                        to="/configuracoes"
+                        className="flex items-center gap-3 text-2xl font-normal text-gray-800 hover:text-cyan-500 transition-colors cursor-pointer pl-9"
+                    >
+                        <span>Configurações</span>
+                    </Link>
                 </nav>
             </aside>
 
