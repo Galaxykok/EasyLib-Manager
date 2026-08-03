@@ -112,10 +112,10 @@ export default function Debug() {
 
     if (debugAtivo === false) {
         return (
-            <div className="flex min-h-screen bg-[#eaf0f6]">
+            <div className="app-shell flex min-h-screen">
                 <Sidebar />
-                <main className="flex-1 flex items-center justify-center p-8">
-                    <div className="max-w-lg bg-cyan-50 border border-cyan-300 shadow-[0_12px_30px_rgba(8,145,178,0.13)] rounded-3xl p-8 text-center">
+                <main className="app-main flex-1 flex items-center justify-center p-8">
+                    <div className="app-panel max-w-lg rounded-xl p-8 text-center">
                         <div className="w-14 h-14 rounded-2xl bg-cyan-50 text-cyan-700 flex items-center justify-center mx-auto mb-4 font-mono text-lg font-bold">&lt;/&gt;</div>
                         <h1 className="text-2xl font-semibold">Painel de Debug desativado</h1>
                         <p className="text-slate-500 mt-2 mb-5">Ative o painel nas Configurações para acessar logs e ferramentas técnicas.</p>
@@ -127,21 +127,21 @@ export default function Debug() {
     }
 
     return (
-        <div className="flex min-h-screen bg-[#eaf0f6] font-sans">
+        <div className="app-shell flex min-h-screen font-sans">
             <Sidebar />
-            <main className="flex-1 p-8 xl:p-10 overflow-y-auto flex flex-col">
+            <main className="app-main flex-1 p-8 xl:p-10 overflow-y-auto flex flex-col">
                 <div className="max-w-6xl w-full mx-auto">
-                <div className="relative mb-6 flex flex-col gap-5 overflow-hidden rounded-3xl bg-gradient-to-r from-slate-950 via-slate-900 to-cyan-900 p-6 text-white shadow-[0_16px_40px_rgba(15,23,42,0.2)] lg:flex-row lg:items-center lg:justify-between">
+                <div className="app-page-header mb-6 flex flex-col gap-5 p-6 lg:flex-row lg:items-center lg:justify-between">
                     <div className="absolute -right-10 -top-20 h-52 w-52 rounded-full bg-cyan-400/10" />
                     <div className="relative">
-                        <p className="mb-2 text-xs font-semibold tracking-[0.18em] text-cyan-300">FERRAMENTAS TÉCNICAS</p>
+                        <p className="app-eyebrow mb-2 text-xs font-semibold tracking-[0.18em] text-cyan-700">FERRAMENTAS TÉCNICAS</p>
                         <h1 className="text-4xl font-semibold tracking-tight">Painel de Debug</h1>
-                        <p className="mt-2 text-slate-300">Erros do sistema aparecem automaticamente nesta tela.</p>
+                        <p className="mt-2 text-slate-500">Erros do sistema aparecem automaticamente nesta tela.</p>
                     </div>
                     <div className="relative flex flex-wrap gap-2">
-                        <button type="button" onClick={atualizar} className="cursor-pointer rounded-xl border border-white/20 bg-white/10 px-4 py-2.5 font-medium text-white transition hover:bg-white/20">Atualizar</button>
-                        <button type="button" onClick={copiar} className="cursor-pointer rounded-xl bg-cyan-500 px-4 py-2.5 font-semibold text-slate-950 shadow-sm transition hover:bg-cyan-400">Copiar logs</button>
-                        <button type="button" onClick={limpar} className="cursor-pointer rounded-xl border border-red-300/50 bg-red-500/15 px-4 py-2.5 font-medium text-red-100 transition hover:bg-red-500/30">Limpar logs</button>
+                        <button type="button" onClick={atualizar} className="app-panel-muted cursor-pointer rounded-lg px-4 py-2.5 font-medium text-slate-700 transition-colors">Atualizar</button>
+                        <button type="button" onClick={copiar} className="app-primary-action cursor-pointer rounded-lg px-4 py-2.5 font-semibold transition-colors">Copiar logs</button>
+                        <button type="button" onClick={limpar} className="cursor-pointer rounded-lg border border-red-300 bg-red-50 px-4 py-2.5 font-medium text-red-700 transition-colors hover:bg-red-100">Limpar logs</button>
                     </div>
                 </div>
                 {retorno && (

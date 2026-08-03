@@ -2,6 +2,12 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { HashRouter } from "react-router-dom";
 import App from './App.tsx'
+import './App.css'
+
+const temaInicial = new URLSearchParams(window.location.search).get("theme");
+if (temaInicial === "dark" || temaInicial === "light") {
+  document.documentElement.dataset.theme = temaInicial;
+}
 
 window.addEventListener("error", (evento) => {
   window.electronAPI?.registrarDebug(

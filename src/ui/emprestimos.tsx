@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./sidebar.tsx";
 import { chaveSerie, normalizarSerie } from "../shared/normalizacao.ts";
@@ -56,6 +56,7 @@ export default function Emprestimos() {
     const [buscaEmprestimos, setBuscaEmprestimos] = useState("");
     const [carregando, setCarregando] = useState(true);
     const [salvando, setSalvando] = useState(false);
+    const listaLivrosRef = useRef<HTMLDivElement>(null);
 
     const carregar = async () => {
         setCarregando(true);
@@ -74,6 +75,10 @@ export default function Emprestimos() {
         const inicial = window.setTimeout(carregar, 0);
         return () => window.clearTimeout(inicial);
     }, []);
+
+    useEffect(() => {
+        listaLivrosRef.current?.scrollTo({ top: 0 });
+    }, [busca]);
 
     const procurarLeitor = async (valor: string) => {
         setNome(valor);
@@ -171,21 +176,27 @@ export default function Emprestimos() {
         const correspondeATurma = chaveSerie(emprestimo.aluno.serie).includes(chaveSerie(termoBuscaEmprestimos));
         return correspondeAosDados || correspondeATurma;
     });
+    const podeRegistrar = Boolean(
+        nome.trim()
+        && selecionados.length
+        && !selecionados.some((id) => !estadosLivros[id])
+        && !salvando,
+    );
 
     return (
-        <div className="flex min-h-screen bg-[#eaf0f6]">
+        <div className="app-shell flex min-h-screen">
             <Sidebar />
 
-            <main className="flex-1 overflow-y-auto p-8 xl:p-10">
+            <main className="app-main flex-1 overflow-y-auto p-8 xl:p-10">
                 <div className="mx-auto max-w-6xl">
-                    <header className="mb-7 rounded-3xl border border-cyan-300 bg-gradient-to-r from-cyan-200 via-sky-100 to-blue-100 p-6 shadow-[0_12px_30px_rgba(8,145,178,0.13)]">
-                        <p className="mb-1 text-sm font-semibold tracking-[0.18em] text-cyan-700">CIRCULAÇÃO</p>
+                    <header className="app-page-header mb-7 p-6">
+                        <p className="app-eyebrow mb-1 text-sm font-semibold tracking-[0.18em] text-cyan-700">CIRCULAÇÃO</p>
                         <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Empréstimos</h1>
                         <p className="mt-2 text-slate-600">Registre retiradas, acompanhe prazos e gere termos de responsabilidade.</p>
                     </header>
 
                     <section className="mb-8 grid gap-6 lg:grid-cols-2">
-                        <article className="rounded-2xl border border-cyan-300 bg-cyan-50 p-6 shadow-[0_8px_24px_rgba(8,145,178,0.1)]">
+                        <article className="app-panel rounded-xl p-6">
                             <div className="mb-5 flex items-center gap-3">
                                 <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-100 font-bold text-cyan-800">1</span>
                                 <div>
@@ -285,7 +296,7 @@ export default function Emprestimos() {
                             )}
                         </article>
 
-                        <article className="rounded-2xl border border-sky-300 bg-sky-50 p-6 shadow-[0_8px_24px_rgba(14,165,233,0.1)]">
+                        <article className="app-panel rounded-xl p-6">
                             <div className="mb-5 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-3">
                                     <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-cyan-100 font-bold text-cyan-800">2</span>
@@ -312,21 +323,24 @@ export default function Emprestimos() {
                                 />
                             </div>
 
-                            <div className="max-h-64 space-y-2 overflow-auto pr-1">
+                            <div
+                                ref={listaLivrosRef}
+                                className="max-h-72 space-y-2 overflow-auto overscroll-contain p-1"
+                            >
                                 {visiveis.map((livro) => {
                                     const selecionado = selecionados.includes(livro.id);
                                     return (
                                         <label
                                             key={livro.id}
-                                            className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition ${
+                                            className={`group flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
                                                 selecionado
-                                                    ? "border-cyan-300 bg-cyan-50 shadow-sm"
-                                                    : "border-sky-200 bg-white/80 hover:border-cyan-400 hover:bg-cyan-50"
+                                                    ? "app-selected-option border-cyan-300"
+                                                    : "border-[var(--app-border)] bg-[var(--app-surface-raised)] hover:border-cyan-400 hover:shadow-md hover:ring-1 hover:ring-cyan-400/30"
                                             }`}
                                         >
                                             <input
                                                 type="checkbox"
-                                                className="mt-1 h-4 w-4 accent-cyan-700"
+                                                className="peer sr-only"
                                                 checked={selecionado}
                                                 onChange={() => {
                                                     setSelecionados((atuais) =>
@@ -342,14 +356,28 @@ export default function Emprestimos() {
                                                     });
                                                 }}
                                             />
+                                            <span
+                                                aria-hidden="true"
+                                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition peer-focus-visible:ring-4 peer-focus-visible:ring-cyan-300/60 ${
+                                                    selecionado
+                                                        ? "border-white bg-[#ffffff] text-cyan-700 shadow-sm"
+                                                        : "border-slate-400 bg-[var(--app-surface)] text-transparent group-hover:border-cyan-500"
+                                                }`}
+                                            >
+                                                <svg viewBox="0 0 20 20" fill="none" className="h-3.5 w-3.5" stroke="currentColor" strokeWidth="2.5">
+                                                    <path d="m4 10 3.5 3.5L16 5.5" strokeLinecap="round" strokeLinejoin="round" />
+                                                </svg>
+                                            </span>
                                             <span className="min-w-0 flex-1">
-                                                <span className="block truncate font-semibold text-slate-800">{livro.titulo}</span>
-                                                <span className="mt-0.5 block text-xs text-slate-500">
+                                                <span className={`block truncate font-semibold ${selecionado ? "text-white" : "text-slate-800"}`}>{livro.titulo}</span>
+                                                <span className={`mt-0.5 block text-xs ${selecionado ? "text-cyan-100" : "text-slate-500"}`}>
                                                     {livro.autor || "Autor não informado"}{livro.isbn ? ` · ISBN ${livro.isbn}` : ""}
                                                 </span>
                                             </span>
                                             <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
-                                                livro.disponiveis < 0
+                                                selecionado
+                                                    ? "bg-white/15 text-white ring-1 ring-white/25"
+                                                    : livro.disponiveis < 0
                                                     ? "bg-orange-100 text-orange-800"
                                                     : livro.disponiveis === 0
                                                       ? "bg-slate-100 text-slate-600"
@@ -362,6 +390,10 @@ export default function Emprestimos() {
                                 })}
                                 {!carregando && visiveis.length === 0 && (
                                     <div className="rounded-xl border border-dashed border-sky-400 bg-sky-100/60 px-4 py-8 text-center text-sm text-slate-600">
+                                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="mx-auto mb-2 h-8 w-8 text-cyan-700">
+                                            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v14a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 19.5v-14Z" strokeWidth="1.8" strokeLinejoin="round" />
+                                            <path d="M14 6a3 3 0 0 1 3-3h2a1 1 0 0 1 1 1v15.5a2.5 2.5 0 0 0-2.5-2.5H14" strokeWidth="1.8" strokeLinejoin="round" />
+                                        </svg>
                                         Nenhum livro encontrado para esta busca.
                                     </div>
                                 )}
@@ -377,7 +409,7 @@ export default function Emprestimos() {
                                         const livroSelecionado = livros.find((livro) => livro.id === livroId);
                                         if (!livroSelecionado) return null;
                                         return (
-                                            <label key={livroId} className="block rounded-xl border border-indigo-200 bg-white/80 p-3 text-sm shadow-sm">
+                                            <label key={livroId} className="block rounded-xl border border-indigo-200 bg-[var(--app-surface-raised)] p-3 text-sm shadow-sm">
                                                 <span className="font-semibold text-slate-800">{livroSelecionado.titulo}</span>
                                                 <input
                                                     type="text"
@@ -410,18 +442,30 @@ export default function Emprestimos() {
 
                             <button
                                 type="button"
-                                disabled={!nome.trim() || !selecionados.length || selecionados.some((id) => !estadosLivros[id]) || salvando}
+                                disabled={!podeRegistrar}
                                 onClick={salvar}
-                                className="mt-5 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-emerald-700 px-5 py-3 font-semibold text-white shadow-sm transition hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 disabled:shadow-none"
+                                className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 font-semibold transition-all ${
+                                    podeRegistrar
+                                        ? "app-primary-action cursor-pointer border-cyan-500 text-white"
+                                        : "cursor-not-allowed border-[var(--app-border)] bg-[var(--app-surface-raised)] text-slate-500 opacity-70 shadow-none"
+                                }`}
                             >
+                                <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-5 w-5" strokeWidth="2">
+                                    <path d="M5 4.5h10.5A2.5 2.5 0 0 1 18 7v12.5H7.5A2.5 2.5 0 0 1 5 17V4.5Z" strokeLinejoin="round" />
+                                    <path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H18M14.5 7.5v4m-2-2h4" strokeLinecap="round" strokeLinejoin="round" />
+                                </svg>
                                 {salvando ? "Registrando..." : "Registrar empréstimo"}
-                                {!salvando && <span aria-hidden="true">→</span>}
+                                {!salvando && (
+                                    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" className="h-4 w-4" strokeWidth="2">
+                                        <path d="M4 10h12m-4-4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
+                                    </svg>
+                                )}
                             </button>
                         </article>
                     </section>
 
-                    <section className="overflow-hidden rounded-2xl border border-slate-300 bg-slate-200/70 shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
-                        <header className="flex flex-wrap items-end justify-between gap-5 border-b border-cyan-200 bg-cyan-100/80 p-6">
+                    <section className="app-panel-muted overflow-hidden rounded-xl">
+                        <header className="app-search-panel flex flex-wrap items-end justify-between gap-5 border-x-0 border-t-0 p-6">
                             <div>
                                 <div className="mb-1 flex items-center gap-2">
                                     <h2 className="text-2xl font-semibold text-slate-900">Empréstimos ativos</h2>

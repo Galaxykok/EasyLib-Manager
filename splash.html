@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Iniciando EasyLib Manager</title>
+    <style>
+      :root {
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+        color: #202b33;
+        background: #f1f4f6;
+        color-scheme: light;
+      }
+
+      :root[data-theme="dark"] {
+        color: #e6ebef;
+        background: #111820;
+        color-scheme: dark;
+      }
+
+      * { box-sizing: border-box; }
+
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        background: #f1f4f6;
+        user-select: none;
+      }
+
+      :root[data-theme="dark"] body { background: #111820; }
+
+      .splash {
+        width: min(440px, calc(100vw - 48px));
+        padding: 36px 38px 32px;
+        background: #fff;
+        border: 1px solid #c8d2da;
+        border-radius: 14px;
+        box-shadow: 0 8px 28px rgba(35, 52, 64, 0.12);
+      }
+
+      :root[data-theme="dark"] .splash {
+        background: #1a242e;
+        border-color: #36434e;
+        box-shadow: 0 8px 28px rgba(0, 0, 0, 0.28);
+      }
+
+      .brand { display: flex; align-items: center; gap: 16px; }
+      .logo {
+        width: 62px;
+        height: 62px;
+        padding: 4px;
+        object-fit: contain;
+        background: #fff;
+        border: 1px solid #c8d2da;
+        border-radius: 11px;
+      }
+      .brand-name { margin: 0; font-size: 24px; line-height: 1.1; font-weight: 700; letter-spacing: -0.02em; }
+      .brand-label { margin: 5px 0 0; color: #5f6e78; font-size: 11px; font-weight: 650; letter-spacing: 0.19em; }
+      :root[data-theme="dark"] .brand-label { color: #aab5ba; }
+
+      .content { margin-top: 34px; }
+      .status { margin: 0; font-size: 15px; font-weight: 650; }
+      .detail { min-height: 20px; margin: 7px 0 18px; color: #5f6e78; font-size: 13px; line-height: 1.45; }
+      :root[data-theme="dark"] .detail { color: #aab5ba; }
+
+      .progress {
+        height: 3px;
+        overflow: hidden;
+        background: #dce3e7;
+        border-radius: 2px;
+      }
+      :root[data-theme="dark"] .progress { background: #34424c; }
+      .progress-bar {
+        width: 38%;
+        height: 100%;
+        background: #28627e;
+        border-radius: inherit;
+        animation: loading 1.15s ease-in-out infinite;
+      }
+      :root[data-theme="dark"] .progress-bar { background: #77a1b5; }
+
+      .actions { display: none; gap: 10px; margin-top: 20px; }
+      .error .progress { display: none; }
+      .error .actions { display: flex; }
+      .error .status { color: #a83e45; }
+      :root[data-theme="dark"] .error .status { color: #f0a4aa; }
+
+      button {
+        min-height: 38px;
+        padding: 0 15px;
+        color: #fff;
+        background: #28627e;
+        border: 1px solid #28627e;
+        border-radius: 8px;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 650;
+        cursor: pointer;
+      }
+      button:hover { background: #204f66; }
+      button.secondary { color: #34434c; background: transparent; border-color: #aebbc5; }
+      :root[data-theme="dark"] button.secondary { color: #dce3e7; border-color: #536573; }
+
+      @keyframes loading {
+        from { transform: translateX(-110%); }
+        to { transform: translateX(270%); }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .progress-bar { width: 100%; animation: none; }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="splash" id="splash" role="status" aria-live="polite">
+      <div class="brand">
+        <img class="logo" src="/src/ui/assets/icon.png" alt="" />
+        <div>
+          <h1 class="brand-name">EasyLib</h1>
+          <p class="brand-label">MANAGER</p>
+        </div>
+      </div>
+      <div class="content">
+        <p class="status" id="status">Preparando o sistema</p>
+        <p class="detail" id="detail">Iniciando os serviços locais da biblioteca.</p>
+        <div class="progress" aria-hidden="true"><div class="progress-bar"></div></div>
+        <div class="actions">
+          <button type="button" id="retry">Tentar novamente</button>
+          <button type="button" id="close" class="secondary">Fechar</button>
+        </div>
+      </div>
+    </main>
+    <script type="module" src="/src/ui/splash.ts"></script>
+  </body>
+</html>

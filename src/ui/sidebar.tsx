@@ -69,20 +69,18 @@ export default function Sidebar() {
     ];
 
     return (
-        <aside className="app-sidebar w-72 h-screen sticky top-0 flex-shrink-0 bg-gradient-to-b from-[#083344] via-[#0b3a4a] to-[#102a43] px-5 py-6 flex flex-col shadow-[8px_0_30px_rgba(15,23,42,0.15)] overflow-hidden relative">
-            <div className="absolute -top-24 -left-20 w-64 h-64 rounded-full bg-cyan-400/10 blur-2xl" />
-            <div className="absolute -bottom-24 -right-20 w-64 h-64 rounded-full bg-emerald-400/10 blur-2xl" />
+        <aside className="app-sidebar w-72 h-screen sticky top-0 flex-shrink-0 px-5 py-6 flex flex-col overflow-hidden relative">
             <div className="relative flex items-center gap-4 px-2 mb-9">
                 <div className="brand-logo-tile w-16 h-16 rounded-2xl bg-white shadow-lg shadow-slate-950/20 ring-1 ring-white/50 flex items-center justify-center">
                     <img src={logo} alt="EasyLib Manager" className="w-14 h-14 object-contain" />
                 </div>
                 <div>
                     <strong className="block text-2xl text-white leading-tight tracking-tight">EasyLib</strong>
-                    <span className="text-[11px] text-cyan-200 tracking-[0.22em] font-medium">MANAGER</span>
+                    <span className="text-[11px] text-slate-300 tracking-[0.22em] font-medium">MANAGER</span>
                 </div>
             </div>
 
-            <p className="relative px-4 mb-2 text-[10px] font-semibold tracking-[0.18em] text-cyan-200/60">NAVEGAÇÃO</p>
+            <p className="relative px-4 mb-2 text-[10px] font-semibold tracking-[0.18em] text-slate-400">NAVEGAÇÃO</p>
             <nav className="relative flex flex-col gap-1.5">
                 {itens.map((item) => {
                     const ativo = item.rota === "/"
@@ -92,15 +90,15 @@ export default function Sidebar() {
                         <Link
                             key={item.rota}
                             to={item.rota}
-                            className={`group flex items-center gap-3 px-4 py-3 rounded-xl border transition-all ${
+                            className={`app-nav-link group flex items-center gap-3 px-4 py-3 border transition-colors ${
                                 ativo
-                                    ? "bg-white text-slate-900 border-white shadow-lg shadow-slate-950/15 font-semibold"
+                                    ? "app-nav-link-active bg-white text-slate-900 border-white font-semibold"
                                     : "text-slate-300 border-transparent hover:bg-white/10 hover:text-white hover:border-white/10"
                             }`}
                         >
-                            <span className={ativo ? "text-cyan-700" : "text-cyan-200/70 group-hover:text-cyan-200"}><IconeMenu tipo={item.icone} /></span>
+                            <span className={ativo ? "text-cyan-700" : "text-slate-400 group-hover:text-slate-200"}><IconeMenu tipo={item.icone} /></span>
                             <span>{item.texto}</span>
-                            {ativo && <span className="ml-auto w-2 h-2 rounded-full bg-cyan-500 shadow-[0_0_0_4px_rgba(6,182,212,0.12)]" />}
+                            {ativo && <span className="app-nav-marker ml-auto" />}
                         </Link>
                     );
                 })}
@@ -108,7 +106,7 @@ export default function Sidebar() {
 
             <div className="relative mt-auto mx-1 p-4 rounded-2xl bg-white/[0.07] border border-white/10 text-xs text-slate-300">
                 <span className="flex items-center gap-2 font-medium text-white mb-1">
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]" />
+                    <span className="app-status-dot w-2 h-2 rounded-full bg-emerald-400" />
                     Sistema local ativo
                 </span>
                 Gestão simples para sua biblioteca

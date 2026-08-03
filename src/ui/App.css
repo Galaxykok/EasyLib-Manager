@@ -2,24 +2,31 @@
 
 :root {
     font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    color: #0f172a;
-    background: #dbe6ef;
+    color: #202b33;
+    background: #f1f4f6;
     color-scheme: light;
-    --app-background: #dbe6ef;
-    --app-surface: #f5f9fd;
+    --app-background: #f1f4f6;
+    --app-surface: #ffffff;
     --app-surface-raised: #ffffff;
-    --app-border: #bfd0df;
-    --app-field-border: #91a8bc;
+    --app-surface-muted: #e7edf1;
+    --app-border: #c8d2da;
+    --app-field-border: #aebbc5;
+    --app-text: #202b33;
+    --app-text-muted: #5f6e78;
+    --app-primary: #28627e;
+    --app-primary-hover: #204f66;
+    --app-primary-soft: #dce8ee;
+    --app-sidebar: #223845;
+    --app-sidebar-muted: #aebdc5;
+    --app-shadow: 0 2px 8px rgba(35, 52, 64, 0.08);
 }
 
 body {
     margin: 0;
     min-width: 1024px;
     min-height: 100vh;
-    background:
-        radial-gradient(circle at 85% 0%, rgba(6, 182, 212, 0.12), transparent 30rem),
-        linear-gradient(135deg, rgba(255, 255, 255, 0.3), transparent 45%),
-        var(--app-background);
+    color: var(--app-text);
+    background: var(--app-background);
 }
 
 html[data-theme="light"] [class~="bg-[#eaf0f6]"] {
@@ -52,21 +59,28 @@ html[data-theme="light"] .shadow-lg {
 }
 
 html[data-theme="dark"] {
-    color: #e5edf6;
-    background: #07111f;
+    color: #e6ebef;
+    background: #111820;
     color-scheme: dark;
-    --app-background: #07111f;
-    --app-surface: #122235;
-    --app-surface-raised: #172a3f;
-    --app-border: #2b435b;
-    --app-field-border: #46617c;
+    --app-background: #111820;
+    --app-surface: #1a242e;
+    --app-surface-raised: #202c36;
+    --app-surface-muted: #222e39;
+    --app-border: #36434e;
+    --app-field-border: #536573;
+    --app-text: #e6ebef;
+    --app-text-muted: #aab5ba;
+    --app-primary: #77a1b5;
+    --app-primary-hover: #8db1c1;
+    --app-primary-soft: #263d49;
+    --app-sidebar: #10171b;
+    --app-sidebar-muted: #9eacb3;
+    --app-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
 }
 
 html[data-theme="dark"] body {
-    background:
-        radial-gradient(circle at 88% 0%, rgba(8, 145, 178, 0.16), transparent 31rem),
-        radial-gradient(circle at 28% 100%, rgba(30, 64, 175, 0.08), transparent 32rem),
-        var(--app-background);
+    color: var(--app-text);
+    background: var(--app-background);
 }
 
 html[data-theme="dark"] [class~="bg-[#eaf0f6]"] {
@@ -103,14 +117,14 @@ html[data-theme="dark"] [class~="bg-cyan-50/30"],
 html[data-theme="dark"] [class~="bg-cyan-50/40"],
 html[data-theme="dark"] [class~="bg-cyan-50/80"],
 html[data-theme="dark"] [class~="bg-cyan-50/90"] {
-    background-color: #0d3342 !important;
+    background-color: #24353e !important;
 }
 
 html[data-theme="dark"] .bg-cyan-100,
 html[data-theme="dark"] .bg-blue-100,
 html[data-theme="dark"] [class~="bg-cyan-100/70"],
 html[data-theme="dark"] [class~="bg-cyan-100/80"] {
-    background-color: #123c50 !important;
+    background-color: #293d46 !important;
 }
 
 html[data-theme="dark"] [class~="bg-sky-100/60"],
@@ -118,7 +132,7 @@ html[data-theme="dark"] [class~="bg-sky-100/70"],
 html[data-theme="dark"] .bg-sky-100,
 html[data-theme="dark"] .bg-sky-50,
 html[data-theme="dark"] [class~="bg-sky-50/80"] {
-    background-color: #15364b !important;
+    background-color: #24343d !important;
 }
 
 html[data-theme="dark"] [class~="bg-slate-200/70"] {
@@ -130,7 +144,7 @@ html[data-theme="dark"] .bg-indigo-100,
 html[data-theme="dark"] .bg-violet-100,
 html[data-theme="dark"] [class~="bg-indigo-50/80"],
 html[data-theme="dark"] [class~="bg-indigo-50/90"] {
-    background-color: #29294f !important;
+    background-color: #2a333d !important;
 }
 
 html[data-theme="dark"] .bg-emerald-50,
@@ -155,17 +169,21 @@ html[data-theme="dark"] .bg-rose-50 {
 }
 
 html[data-theme="dark"] [class~="bg-white/70"],
-html[data-theme="dark"] [class~="bg-white/75"] {
+html[data-theme="dark"] [class~="bg-white/75"],
+html[data-theme="dark"] [class~="bg-white/80"],
+html[data-theme="dark"] [class~="bg-white/90"] {
     background-color: rgba(18, 34, 53, 0.92) !important;
 }
 
 html[data-theme="dark"] [class~="bg-gradient-to-r"][class~="from-cyan-100"],
 html[data-theme="dark"] [class~="bg-gradient-to-r"][class~="from-cyan-200"] {
-    background-image: linear-gradient(to right, #123848, #122b3d 55%, #132235) !important;
+    background-image: none !important;
+    background-color: var(--app-surface) !important;
 }
 
 html[data-theme="dark"] [class~="bg-gradient-to-br"][class~="from-sky-50"] {
-    background-image: linear-gradient(to bottom right, #15364b, #102a3b, #103342) !important;
+    background-image: none !important;
+    background-color: var(--app-surface) !important;
 }
 
 html[data-theme="dark"] .text-slate-950,
@@ -203,11 +221,11 @@ html[data-theme="dark"] .text-cyan-900,
 html[data-theme="dark"] .text-cyan-800,
 html[data-theme="dark"] .text-cyan-700,
 html[data-theme="dark"] .text-cyan-600 {
-    color: #67e8f9 !important;
+    color: #9fc0cf !important;
 }
 
 html[data-theme="dark"] .text-sky-900 {
-    color: #bae6fd !important;
+    color: #b5cbd5 !important;
 }
 
 html[data-theme="dark"] .text-blue-800 {
@@ -216,7 +234,7 @@ html[data-theme="dark"] .text-blue-800 {
 
 html[data-theme="dark"] .text-indigo-700,
 html[data-theme="dark"] .text-violet-800 {
-    color: #c4b5fd !important;
+    color: #bbc4ce !important;
 }
 
 html[data-theme="dark"] .text-emerald-800,
@@ -250,13 +268,13 @@ html[data-theme="dark"] .border-gray-300 {
 html[data-theme="dark"] .border-cyan-100,
 html[data-theme="dark"] .border-cyan-200,
 html[data-theme="dark"] .border-cyan-300 {
-    border-color: #236378 !important;
+    border-color: #425b68 !important;
 }
 
 html[data-theme="dark"] .border-sky-200,
 html[data-theme="dark"] .border-sky-300,
 html[data-theme="dark"] .border-sky-400 {
-    border-color: #315f78 !important;
+    border-color: #42545f !important;
 }
 
 html[data-theme="dark"] .border-indigo-200 {
@@ -286,6 +304,18 @@ html[data-theme="dark"] .border-red-200 {
 html[data-theme="dark"] .divide-sky-200 > :not(:last-child),
 html[data-theme="dark"] .divide-cyan-100 > :not(:last-child) {
     border-color: var(--app-border) !important;
+}
+
+html[data-theme="light"] input[role="switch"]:checked + .switch-track,
+html[data-theme="dark"] input[role="switch"]:checked + .switch-track {
+    background-color: var(--app-primary) !important;
+    border-color: var(--app-primary) !important;
+}
+
+html[data-theme="dark"] button:disabled[class*="disabled:bg-slate-300"] {
+    color: #8292a6 !important;
+    background-color: #24384d !important;
+    border-color: #334b62 !important;
 }
 
 html[data-theme="dark"] input:not([type="checkbox"]):not([type="radio"]),
@@ -323,12 +353,17 @@ html[data-theme="dark"] .shadow-2xl {
 }
 
 html[data-theme="dark"] .app-sidebar {
-    background-image: linear-gradient(to bottom, #020617, #071725 48%, #092535) !important;
-    box-shadow: 8px 0 34px rgba(0, 0, 0, 0.38);
+    background: var(--app-sidebar) !important;
+    box-shadow: 1px 0 0 var(--app-border);
 }
 
 .brand-logo-tile,
 html[data-theme="dark"] .brand-logo-tile {
+    background: #fff !important;
+}
+
+.switch-thumb,
+html[data-theme="dark"] .switch-thumb {
     background: #fff !important;
 }
 
@@ -343,19 +378,19 @@ input:focus,
 select:focus,
 textarea:focus {
     outline: none;
-    border-color: #0891b2 !important;
-    box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.13);
+    border-color: var(--app-primary) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--app-primary) 22%, transparent);
 }
 
 button:focus-visible,
 a:focus-visible {
-    outline: 3px solid rgba(6, 182, 212, 0.32);
+    outline: 2px solid var(--app-primary);
     outline-offset: 2px;
 }
 
 ::selection {
-    color: #083344;
-    background: #a5f3fc;
+    color: var(--app-text);
+    background: var(--app-primary-soft);
 }
 
 ::-webkit-scrollbar {
@@ -368,6 +403,261 @@ a:focus-visible {
     border-radius: 999px;
     background: #94a3b8;
     background-clip: padding-box;
+}
+
+/* Linguagem visual institucional: superfícies sólidas, contraste e uma única cor de destaque. */
+html[data-theme="light"] .bg-cyan-50,
+html[data-theme="light"] [class~="bg-cyan-50/30"],
+html[data-theme="light"] [class~="bg-cyan-50/40"],
+html[data-theme="light"] [class~="bg-cyan-50/80"],
+html[data-theme="light"] [class~="bg-cyan-50/90"],
+html[data-theme="light"] .bg-sky-50,
+html[data-theme="light"] [class~="bg-sky-50/80"] {
+    background-color: #f5f8fa !important;
+}
+
+html[data-theme="light"] .bg-cyan-100,
+html[data-theme="light"] [class~="bg-cyan-100/70"],
+html[data-theme="light"] [class~="bg-cyan-100/80"],
+html[data-theme="light"] .bg-sky-100,
+html[data-theme="light"] [class~="bg-sky-100/60"],
+html[data-theme="light"] [class~="bg-sky-100/70"],
+html[data-theme="light"] .bg-blue-100 {
+    background-color: var(--app-primary-soft) !important;
+}
+
+html[data-theme="light"] .bg-indigo-50,
+html[data-theme="light"] .bg-indigo-100,
+html[data-theme="light"] .bg-violet-100,
+html[data-theme="light"] [class~="bg-indigo-50/80"],
+html[data-theme="light"] [class~="bg-indigo-50/90"] {
+    background-color: #edf1f3 !important;
+}
+
+html[data-theme="light"] .text-cyan-900,
+html[data-theme="light"] .text-cyan-800,
+html[data-theme="light"] .text-cyan-700,
+html[data-theme="light"] .text-cyan-600,
+html[data-theme="light"] .text-sky-900,
+html[data-theme="light"] .text-blue-800,
+html[data-theme="light"] .text-indigo-700,
+html[data-theme="light"] .text-violet-800 {
+    color: #315f75 !important;
+}
+
+html[data-theme="light"] .border-cyan-100,
+html[data-theme="light"] .border-cyan-200,
+html[data-theme="light"] .border-cyan-300,
+html[data-theme="light"] .border-sky-200,
+html[data-theme="light"] .border-sky-300,
+html[data-theme="light"] .border-sky-400,
+html[data-theme="light"] .border-indigo-200 {
+    border-color: #bdcbd3 !important;
+}
+
+.bg-cyan-500,
+.bg-cyan-600,
+.bg-cyan-700,
+.bg-blue-700,
+.bg-green-700 {
+    background-color: var(--app-primary) !important;
+}
+
+.hover\:bg-cyan-400:hover,
+.hover\:bg-cyan-500:hover,
+.hover\:bg-cyan-800:hover,
+.hover\:bg-blue-600:hover,
+.hover\:bg-green-800:hover {
+    background-color: var(--app-primary-hover) !important;
+}
+
+[class*="ring-cyan-"],
+[class*="ring-sky-"] {
+    --tw-ring-color: color-mix(in srgb, var(--app-primary) 28%, transparent) !important;
+}
+
+.app-shell {
+    color: var(--app-text);
+    background: var(--app-background) !important;
+}
+
+.app-main {
+    background: var(--app-background) !important;
+}
+
+.app-sidebar {
+    color: #edf2f4;
+    background: var(--app-sidebar) !important;
+    border-right: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: none !important;
+}
+
+.app-sidebar-decoration {
+    display: none;
+}
+
+.brand-logo-tile {
+    border: 1px solid rgba(255, 255, 255, 0.24) !important;
+    border-radius: 12px !important;
+    box-shadow: 0 2px 8px rgba(6, 18, 25, 0.24) !important;
+}
+
+.app-nav-link {
+    border-radius: 9px !important;
+}
+
+.app-nav-link-active {
+    color: #17242b !important;
+    background: #f6f8f9 !important;
+    border-color: #f6f8f9 !important;
+    box-shadow: none !important;
+}
+
+.app-nav-marker {
+    width: 3px !important;
+    height: 22px !important;
+    border-radius: 2px !important;
+    background: var(--app-primary) !important;
+    box-shadow: none !important;
+}
+
+.app-status-dot {
+    box-shadow: none !important;
+}
+
+.app-page-header {
+    position: relative;
+    overflow: hidden;
+    color: var(--app-text) !important;
+    background: var(--app-surface) !important;
+    background-image: none !important;
+    border: 1px solid var(--app-border) !important;
+    border-left: 4px solid var(--app-primary) !important;
+    border-radius: 14px !important;
+    box-shadow: var(--app-shadow) !important;
+}
+
+.app-page-header::after {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 4px;
+    background: var(--app-primary);
+}
+
+.app-page-header > [class*="absolute"] {
+    display: none;
+}
+
+.app-page-header p:not(.app-eyebrow) {
+    color: var(--app-text-muted) !important;
+}
+
+.app-eyebrow {
+    color: var(--app-primary) !important;
+}
+
+.app-panel {
+    background: var(--app-surface) !important;
+    background-image: none !important;
+    border: 1px solid var(--app-border) !important;
+    box-shadow: var(--app-shadow) !important;
+}
+
+.app-panel-muted {
+    background: var(--app-surface-muted) !important;
+    background-image: none !important;
+    border: 1px solid var(--app-border) !important;
+    box-shadow: none !important;
+}
+
+.app-search-panel {
+    background: var(--app-primary-soft) !important;
+    background-image: none !important;
+    border: 1px solid var(--app-border) !important;
+    box-shadow: none !important;
+}
+
+.app-welcome {
+    color: #fff;
+    background: #315f72 !important;
+    background-image: none !important;
+    border: 1px solid #284f60 !important;
+    border-radius: 14px !important;
+    box-shadow: var(--app-shadow) !important;
+}
+
+.app-welcome-morning {
+    background: #496b75 !important;
+}
+
+.app-welcome-afternoon {
+    background: #445f6d !important;
+}
+
+.app-welcome-night {
+    background: #2c3c48 !important;
+}
+
+.app-welcome-icon {
+    display: flex;
+    width: 72px;
+    height: 72px;
+    align-items: center;
+    justify-content: center;
+    color: rgba(255, 255, 255, 0.9);
+    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+    border-radius: 12px;
+    box-shadow: none;
+}
+
+.app-stat-card {
+    background: var(--app-surface) !important;
+    background-image: none !important;
+    border: 1px solid var(--app-border) !important;
+    border-top: 3px solid var(--app-primary) !important;
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+.app-stat-icon {
+    color: var(--app-primary) !important;
+    background: var(--app-primary-soft) !important;
+}
+
+.app-selected-option {
+    color: #fff !important;
+    background: var(--app-primary) !important;
+    background-image: none !important;
+    border-color: var(--app-primary) !important;
+    box-shadow: none !important;
+}
+
+.app-primary-action {
+    color: #fff !important;
+    background: var(--app-primary) !important;
+    background-image: none !important;
+    border-color: var(--app-primary) !important;
+    box-shadow: none !important;
+}
+
+.app-primary-action:hover {
+    background: var(--app-primary-hover) !important;
+}
+
+.app-card-action {
+    border-radius: 12px !important;
+    box-shadow: none !important;
+    transform: none !important;
+}
+
+@media (hover: hover) {
+    main [class*="hover:-translate-y"]:hover,
+    main [class*="group-hover:translate-x"]:hover {
+        transform: none !important;
+    }
 }
 
 .folha-termos {

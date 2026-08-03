@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react';
 import type { FormEvent } from 'react';
-import "./App.css";
 import Sidebar from "./sidebar.tsx";
 
 interface Aluno {
@@ -118,22 +117,22 @@ export default function Alunos() {
     const turmaAnterior = () => setIndiceTurma((i) => Math.max(i - 1, 0));
 
     return (
-        <div className="flex h-screen w-screen bg-[#eaf0f6] font-sans overflow-hidden relative">
+        <div className="app-shell flex h-screen w-screen font-sans overflow-hidden relative">
             <Sidebar />
 
-            <main className="flex-1 flex flex-col items-center p-8 xl:p-10 bg-[#eaf0f6] overflow-y-auto">
+            <main className="app-main flex-1 flex flex-col items-center p-8 xl:p-10 overflow-y-auto">
                 <div className="w-full max-w-7xl flex flex-col min-h-full pb-2">
 
                     <div className="contents">
-                        <header className="order-1 bg-gradient-to-r from-cyan-200 via-sky-100 to-blue-100 border border-cyan-300 rounded-3xl py-5 px-6 mb-5 shadow-[0_12px_30px_rgba(8,145,178,0.13)]">
-                        <p className="text-xs font-semibold tracking-[0.18em] text-cyan-700 mb-1">COMUNIDADE</p>
+                        <header className="app-page-header order-1 py-5 px-6 mb-5">
+                        <p className="app-eyebrow text-xs font-semibold tracking-[0.18em] text-cyan-700 mb-1">COMUNIDADE</p>
                         <h1 className="text-4xl font-semibold text-slate-900 tracking-tight">
                             Alunos
                         </h1>
                         <p className="text-sm text-slate-600 mt-1">Encontre estudantes e mantenha os dados de turma organizados.</p>
                         </header>
 
-                        <div className="order-3 w-full bg-slate-200/70 border border-slate-300 rounded-2xl p-3 min-h-[420px] flex flex-col gap-2 overflow-y-auto shadow-[0_8px_24px_rgba(15,23,42,0.08)]">
+                        <div className="app-panel-muted order-3 w-full rounded-xl p-3 min-h-[420px] flex flex-col gap-2 overflow-y-auto">
                             <div className="sticky top-0 z-10 flex items-center justify-between gap-4 rounded-xl border border-sky-200 bg-sky-100 px-4 py-3 shadow-sm">
                                 <div>
                                     <h2 className="font-semibold text-slate-900">Alunos encontrados</h2>
@@ -156,7 +155,7 @@ export default function Alunos() {
                                         <div 
                                             key={aluno.id} 
                                             onClick={() => setSelectedAluno(aluno)}
-                                            className="grid grid-cols-[70px_minmax(0,1fr)_160px] gap-4 items-center bg-sky-50 border border-sky-200 p-4 rounded-xl shadow-sm hover:border-cyan-500 hover:bg-cyan-50 hover:shadow-md transition-all cursor-pointer"
+                                            className="app-panel grid grid-cols-[70px_minmax(0,1fr)_160px] gap-4 items-center p-4 rounded-lg hover:border-cyan-500 transition-colors cursor-pointer"
                                         >
                                             <span className="w-fit font-mono text-xs font-semibold text-cyan-800 bg-cyan-50 border border-cyan-100 px-2.5 py-1.5 rounded-lg">{aluno.id}</span>
                                             <span className="text-lg font-semibold text-slate-800 truncate">{aluno.nome}</span>
@@ -170,7 +169,7 @@ export default function Alunos() {
                         </div>
                     </div>
                     
-                    <div className="order-2 w-full flex items-end justify-between gap-4 mb-5 bg-cyan-100/80 border border-cyan-300 p-4 rounded-2xl shadow-[0_8px_24px_rgba(8,145,178,0.1)]">
+                    <div className="app-search-panel order-2 w-full flex items-end justify-between gap-4 mb-5 p-4 rounded-xl">
                         <div className="flex min-w-0 flex-col gap-1.5">
                             <span className="text-xs font-bold uppercase tracking-[0.12em] text-cyan-900">Localizar estudante</span>
                             <div className="flex items-center gap-2">

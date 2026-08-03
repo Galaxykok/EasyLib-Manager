@@ -1,9 +1,33 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import Sidebar from "./sidebar.tsx";
 
 const formatarData = (valor: Date | string | null) =>
     valor ? new Date(valor).toLocaleDateString("pt-BR") : "Sem prazo";
+
+type TipoIconeEstatistica = "mes" | "hoje" | "livro" | "serie" | "leitor";
+type TipoSaudacao = "manha" | "tarde" | "noite";
+
+function IconeEstatistica({ tipo }: { tipo: TipoIconeEstatistica }) {
+    const caminhos: Record<TipoIconeEstatistica, ReactNode> = {
+        mes: <><path d="m4 16 5-5 4 4 7-8"/><path d="M15 7h5v5"/></>,
+        hoje: <><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></>,
+        livro: <><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 0-3 3V4Z"/><path d="M5 20a3 3 0 0 1 3-3h11"/></>,
+        serie: <><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m5 12 7 4 7-4M5 16l7 4 7-4"/></>,
+        leitor: <><circle cx="12" cy="8" r="3"/><path d="M5 20c.6-4 3-6 7-6s6.4 2 7 6"/></>,
+    };
+    return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" className="h-5 w-5">{caminhos[tipo]}</svg>;
+}
+
+function IconeSaudacao({ tipo }: { tipo: TipoSaudacao }) {
+    const caminhos: Record<TipoSaudacao, ReactNode> = {
+        manha: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></>,
+        tarde: <><path d="M4 15h16M6 19h12"/><path d="M8 15a4 4 0 1 1 8 0"/><path d="M12 4v2M5.6 8.2 7 9.6M18.4 8.2 17 9.6"/></>,
+        noite: <path d="M20 15.2A8.5 8.5 0 0 1 8.8 4 8.5 8.5 0 1 0 20 15.2Z"/>,
+    };
+    return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className="h-9 w-9">{caminhos[tipo]}</svg>;
+}
 
 export default function Home() {
     const [dashboard, setDashboard] = useState<Dashboard | null>(null);
@@ -28,9 +52,9 @@ export default function Home() {
 
     const saudacao = useMemo(() => {
         const hora = new Date().getHours();
-        if (hora < 12) return { texto: "Bom dia", icone: "☀️", gradiente: "from-[#0f4c5c] via-cyan-700 to-amber-400", detalhe: "Que seu dia comece com boas histórias." };
-        if (hora < 18) return { texto: "Boa tarde", icone: "🌤️", gradiente: "from-[#0f4c5c] via-cyan-700 to-sky-500", detalhe: "Uma ótima tarde de leitura e organização." };
-        return { texto: "Boa noite", icone: "🌙", gradiente: "from-slate-950 via-indigo-900 to-slate-700", detalhe: "Encerrando mais um dia de conhecimento." };
+        if (hora < 12) return { texto: "Bom dia", tipo: "manha" as TipoSaudacao, classe: "app-welcome-morning", detalhe: "Que seu dia comece com boas histórias." };
+        if (hora < 18) return { texto: "Boa tarde", tipo: "tarde" as TipoSaudacao, classe: "app-welcome-afternoon", detalhe: "Uma ótima tarde de leitura e organização." };
+        return { texto: "Boa noite", tipo: "noite" as TipoSaudacao, classe: "app-welcome-night", detalhe: "Encerrando mais um dia de conhecimento." };
     }, []);
 
     const proximos = useMemo(() =>
@@ -41,29 +65,27 @@ export default function Home() {
     [emprestimos]);
 
     const estatisticas = [
-        { rotulo: "Empréstimos no mês", valor: dashboard?.emprestimosMes ?? 0, detalhe: "registros neste mês", cor: "bg-cyan-100 text-cyan-800", borda: "border-t-cyan-500", icone: "↗" },
-        { rotulo: "Empréstimos hoje", valor: dashboard?.emprestimosHoje ?? 0, detalhe: "movimentações hoje", cor: "bg-emerald-100 text-emerald-800", borda: "border-t-emerald-500", icone: "◷" },
-        { rotulo: "Livro favorito", valor: dashboard?.livroFavorito?.nome || "Sem dados", detalhe: dashboard?.livroFavorito ? `${dashboard.livroFavorito.total} empréstimo(s)` : "neste mês", cor: "bg-violet-100 text-violet-800", borda: "border-t-violet-500", icone: "★" },
-        { rotulo: "Série em destaque", valor: dashboard?.serieDestaque?.nome || "Sem dados", detalhe: dashboard?.serieDestaque ? `${dashboard.serieDestaque.total} empréstimo(s)` : "neste mês", cor: "bg-blue-100 text-blue-800", borda: "border-t-blue-500", icone: "◆" },
-        { rotulo: "Leitor destaque", valor: dashboard?.alunoDestaque?.nome || "Sem dados", detalhe: dashboard?.alunoDestaque ? `${dashboard.alunoDestaque.total} empréstimo(s)` : "neste mês", cor: "bg-amber-100 text-amber-800", borda: "border-t-amber-500", icone: "♙" },
+        { rotulo: "Empréstimos no mês", valor: dashboard?.emprestimosMes ?? 0, detalhe: "registros neste mês", icone: "mes" as TipoIconeEstatistica },
+        { rotulo: "Empréstimos hoje", valor: dashboard?.emprestimosHoje ?? 0, detalhe: "movimentações hoje", icone: "hoje" as TipoIconeEstatistica },
+        { rotulo: "Livro favorito", valor: dashboard?.livroFavorito?.nome || "Sem dados", detalhe: dashboard?.livroFavorito ? `${dashboard.livroFavorito.total} empréstimo(s)` : "neste mês", icone: "livro" as TipoIconeEstatistica },
+        { rotulo: "Série em destaque", valor: dashboard?.serieDestaque?.nome || "Sem dados", detalhe: dashboard?.serieDestaque ? `${dashboard.serieDestaque.total} empréstimo(s)` : "neste mês", icone: "serie" as TipoIconeEstatistica },
+        { rotulo: "Leitor destaque", valor: dashboard?.alunoDestaque?.nome || "Sem dados", detalhe: dashboard?.alunoDestaque ? `${dashboard.alunoDestaque.total} empréstimo(s)` : "neste mês", icone: "leitor" as TipoIconeEstatistica },
     ];
 
     return (
-        <div className="flex min-h-screen bg-[#eaf0f6] text-slate-900">
+        <div className="app-shell flex min-h-screen text-slate-900">
             <Sidebar />
-            <main className="flex-1 min-w-0 p-8 xl:p-10 overflow-y-auto">
+            <main className="app-main flex-1 min-w-0 p-8 xl:p-10 overflow-y-auto">
                 <div className="max-w-7xl mx-auto">
                     <div className="flex items-center justify-between mb-4">
                         <div>
-                            <p className="text-xs font-semibold tracking-[0.18em] text-cyan-800">VISÃO GERAL</p>
+                            <p className="app-eyebrow text-xs font-semibold tracking-[0.18em] text-cyan-800">VISÃO GERAL</p>
                             <h2 className="text-2xl font-semibold tracking-tight mt-1">Painel da biblioteca</h2>
                         </div>
                         <span className="px-3 py-1.5 rounded-full bg-cyan-100 border border-cyan-200 text-xs font-semibold text-cyan-900 shadow-sm">Dados deste mês</span>
                     </div>
-                    <section className={`relative overflow-hidden bg-gradient-to-br ${saudacao.gradiente} border border-white/20 rounded-3xl p-7 mb-7 text-white shadow-[0_18px_45px_rgba(15,76,92,0.22)]`}>
-                        <div className="absolute -right-10 -top-14 w-52 h-52 rounded-full bg-white/15" />
-                        <div className="absolute right-32 -bottom-20 w-40 h-40 rounded-full bg-white/10" />
-                        <div className="relative flex items-center justify-between gap-6">
+                    <section className={`app-welcome ${saudacao.classe} p-7 mb-7 text-white`}>
+                        <div className="flex items-center justify-between gap-6">
                             <div>
                                 <p className="text-sm font-medium text-white/70 mb-1 capitalize">
                                     {new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })}
@@ -71,14 +93,14 @@ export default function Home() {
                                 <h1 className="text-4xl font-semibold tracking-tight">{saudacao.texto}, {responsavel}!</h1>
                                 <p className="text-white/80 mt-2">{saudacao.detalhe}</p>
                             </div>
-                            <span className="text-7xl drop-shadow-sm bg-white/10 border border-white/15 rounded-3xl w-28 h-28 flex items-center justify-center backdrop-blur-sm" aria-hidden="true">{saudacao.icone}</span>
+                            <span className="app-welcome-icon" aria-hidden="true"><IconeSaudacao tipo={saudacao.tipo} /></span>
                         </div>
                     </section>
 
                     <div className="grid grid-cols-2 xl:grid-cols-5 gap-4 mb-7">
                         {estatisticas.map((item) => (
-                            <article key={item.rotulo} className={`bg-gradient-to-br from-sky-50 to-cyan-50/80 border border-sky-200 border-t-4 ${item.borda} rounded-2xl p-5 shadow-[0_7px_22px_rgba(14,116,144,0.09)] hover:-translate-y-0.5 hover:border-sky-300 hover:shadow-lg transition-all min-w-0`}>
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center text-xl mb-4 ${item.cor}`}>{item.icone}</div>
+                            <article key={item.rotulo} className="app-stat-card p-5 transition-colors min-w-0">
+                                <div className="app-stat-icon w-10 h-10 rounded-lg flex items-center justify-center mb-4"><IconeEstatistica tipo={item.icone} /></div>
                                 <p className="text-sm text-slate-500">{item.rotulo}</p>
                                 <strong className="block text-xl mt-1 truncate" title={String(item.valor)}>{item.valor}</strong>
                                 <span className="text-xs text-slate-400 mt-1 block">{item.detalhe}</span>
@@ -87,7 +109,7 @@ export default function Home() {
                     </div>
 
                     <div className="grid xl:grid-cols-[1fr_330px] gap-6">
-                        <section className="bg-sky-50/80 border-2 border-sky-200 rounded-2xl shadow-[0_8px_24px_rgba(14,116,144,0.08)] overflow-hidden">
+                        <section className="app-panel rounded-xl overflow-hidden">
                             <header className="flex items-center justify-between px-6 py-5 border-b border-slate-700 bg-slate-800 text-white">
                                 <div>
                                     <h2 className="text-xl font-semibold">Próximas devoluções</h2>
@@ -129,13 +151,13 @@ export default function Home() {
                                     <div className="text-right"><strong className="text-3xl text-red-300">{dashboard?.atrasados ?? 0}</strong><span className="block text-sm text-slate-300">atrasados</span></div>
                                 </div>
                             </article>
-                            <Link to="/emprestimos" className="block bg-green-700 hover:bg-green-800 text-white rounded-2xl p-5 transition-colors shadow-sm">
+                            <Link to="/emprestimos" className="app-primary-action app-card-action block text-white p-5 transition-colors">
                                 <strong className="block text-lg">Novo empréstimo</strong>
                                 <span className="text-sm text-green-100">Registrar livros e gerar termo →</span>
                             </Link>
-                            <Link to="/acervo" className="block bg-cyan-700 border border-cyan-600 hover:bg-cyan-800 text-white rounded-2xl p-5 transition-colors shadow-sm">
+                            <Link to="/acervo" className="app-card-action app-panel block p-5 transition-colors">
                                 <strong className="block text-lg">Consultar acervo</strong>
-                                <span className="text-sm text-cyan-100">Pesquisar títulos e estoque →</span>
+                                <span className="text-sm text-slate-500">Pesquisar títulos e estoque →</span>
                             </Link>
                         </aside>
                     </div>

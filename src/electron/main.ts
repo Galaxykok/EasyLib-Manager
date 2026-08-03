@@ -1,4 +1,4 @@
-import { app, BrowserWindow, clipboard, ipcMain } from "electron";
+import { app, BrowserWindow, clipboard, ipcMain, nativeTheme } from "electron";
 import path from "path";
 import { prisma } from "../../lib/prisma.ts";
 import { StatusEmprestimo, StatusLivro, TipoLeitor, TipoMovimentacao } from "@prisma/client";
@@ -29,6 +29,29 @@ Assinatura do aluno
 ____________________________________
 Assinatura do responsável pela biblioteca`;
 
+const CONFIGURACAO_PADRAO = {
+  id: 1,
+  termoResponsabilidadeAtivo: true,
+  responsavelBiblioteca: "",
+  modeloTermo: MODELO_TERMO_PADRAO,
+  paresTermosPorFolha: 2,
+  tipoFolha: "A4",
+  painelDebugAtivo: true,
+  modoEscuro: false,
+};
+
+const obterConfiguracaoPersistida = async () => {
+  const configuracao = await prisma.configuracao.upsert({
+    where: { id: 1 },
+    update: {},
+    create: { ...CONFIGURACAO_PADRAO },
+  });
+  return {
+    ...configuracao,
+    modeloTermo: configuracao.modeloTermo || MODELO_TERMO_PADRAO,
+  };
+};
+
 const substituirVariaveis = (modelo: string, valores: Record<string, string>) =>
   Object.entries(valores).reduce(
     (texto, [variavel, valor]) => texto.replaceAll(`{{${variavel}}}`, valor),
@@ -55,10 +78,177 @@ const erro = (error: unknown) => {
 process.on("uncaughtException", (error) => registrarErro("Processo principal", error.message, error.stack));
 process.on("unhandledRejection", (motivo) => registrarErro("Processo principal", "Promessa rejeitada sem tratamento", motivo instanceof Error ? motivo.stack : String(motivo)));
 
-app.on("ready", () => {
-  const mainWindow = new BrowserWindow({ width: 1280, height: 720, minWidth: 1024, minHeight: 640, icon: path.join(app.getAppPath(), "/src/ui/assets/icontask.png"), webPreferences: { preload: path.join(app.getAppPath(), "dist-electron/src/electron/preload.cjs"), contextIsolation: true, nodeIntegration: false } });
-  mainWindow.maximize();
-  mainWindow.loadFile(path.join(app.getAppPath(), "/dist-react/index.html"));
+type EstadoInicializacao = "carregando" | "pronto" | "erro";
+type StatusInicializacao = {
+  estado: EstadoInicializacao;
+  titulo: string;
+  detalhe: string;
+  tema?: "light" | "dark";
+};
+
+let mainWindow: BrowserWindow | null = null;
+let splashWindow: BrowserWindow | null = null;
+let inicializando = false;
+
+const aguardar = (tempo: number) => new Promise((resolve) => setTimeout(resolve, tempo));
+const caminhoDistribuicao = (...partes: string[]) => path.join(app.getAppPath(), ...partes);
+
+const enviarStatusInicializacao = (status: StatusInicializacao) => {
+  if (!splashWindow || splashWindow.isDestroyed()) return;
+  splashWindow.webContents.send("startup:status", status);
+};
+
+const criarSplash = async () => {
+  const temaInicial = nativeTheme.shouldUseDarkColors ? "dark" : "light";
+  splashWindow = new BrowserWindow({
+    width: 520,
+    height: 390,
+    show: false,
+    frame: false,
+    resizable: false,
+    maximizable: false,
+    minimizable: false,
+    autoHideMenuBar: true,
+    backgroundColor: temaInicial === "dark" ? "#111820" : "#f1f4f6",
+    webPreferences: {
+      preload: caminhoDistribuicao("dist-electron", "src", "electron", "splash-preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  splashWindow.center();
+  splashWindow.on("closed", () => { splashWindow = null; });
+  await splashWindow.loadFile(caminhoDistribuicao("dist-react", "splash.html"), {
+    query: { theme: temaInicial },
+  });
+  splashWindow.show();
+};
+
+const prepararInicializacao = async () => {
+  enviarStatusInicializacao({
+    estado: "carregando",
+    titulo: "Verificando o banco local",
+    detalhe: "Conferindo se os dados da biblioteca estão disponíveis.",
+  });
+  await prisma.$queryRawUnsafe("SELECT 1 AS ok");
+
+  enviarStatusInicializacao({
+    estado: "carregando",
+    titulo: "Carregando preferências",
+    detalhe: "Aplicando as configurações salvas neste computador.",
+  });
+  const configuracao = await obterConfiguracaoPersistida();
+  const tema: "dark" | "light" = configuracao.modoEscuro ? "dark" : "light";
+  enviarStatusInicializacao({
+    estado: "carregando",
+    titulo: "Preparando o ambiente local",
+    detalhe: "Organizando os serviços necessários para iniciar o EasyLib.",
+    tema,
+  });
+
+  // A futura validação de licença e vínculo com o computador deve executar aqui,
+  // antes que a janela principal e os dados do sistema sejam liberados.
+  return { tema };
+};
+
+const criarJanelaPrincipal = async (tema: "light" | "dark") => {
+  const janela = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    minWidth: 1024,
+    minHeight: 640,
+    show: false,
+    autoHideMenuBar: true,
+    backgroundColor: tema === "dark" ? "#111820" : "#f1f4f6",
+    icon: caminhoDistribuicao("src", "ui", "assets", "icontask.png"),
+    webPreferences: {
+      preload: caminhoDistribuicao("dist-electron", "src", "electron", "preload.cjs"),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+    },
+  });
+  mainWindow = janela;
+
+  const prontaParaMostrar = new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => reject(new Error("A interface demorou demais para responder.")), 15000);
+    janela.once("ready-to-show", () => {
+      clearTimeout(timeout);
+      resolve();
+    });
+    janela.webContents.once("did-fail-load", (_event, codigo, descricao) => {
+      clearTimeout(timeout);
+      reject(new Error(`Não foi possível carregar a interface (${codigo}): ${descricao}`));
+    });
+  });
+
+  await janela.loadFile(caminhoDistribuicao("dist-react", "index.html"), {
+    query: { theme: tema },
+  });
+  await prontaParaMostrar;
+  return janela;
+};
+
+const iniciarAplicacao = async () => {
+  if (inicializando) return;
+  inicializando = true;
+  const inicio = Date.now();
+
+  try {
+    if (!splashWindow || splashWindow.isDestroyed()) await criarSplash();
+    enviarStatusInicializacao({
+      estado: "carregando",
+      titulo: "Preparando o sistema",
+      detalhe: "Iniciando os serviços locais da biblioteca.",
+    });
+
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    mainWindow = null;
+
+    const { tema } = await prepararInicializacao();
+    enviarStatusInicializacao({
+      estado: "carregando",
+      titulo: "Carregando a interface",
+      detalhe: "O EasyLib estará pronto em instantes.",
+      tema,
+    });
+    const janela = await criarJanelaPrincipal(tema);
+
+    const tempoRestante = Math.max(0, 650 - (Date.now() - inicio));
+    if (tempoRestante) await aguardar(tempoRestante);
+    enviarStatusInicializacao({
+      estado: "pronto",
+      titulo: "Tudo pronto",
+      detalhe: "Abrindo o painel da biblioteca.",
+      tema,
+    });
+    await aguardar(180);
+
+    janela.maximize();
+    janela.show();
+    if (splashWindow && !splashWindow.isDestroyed()) splashWindow.close();
+  } catch (error) {
+    const mensagem = error instanceof Error ? error.message : "Erro inesperado durante a inicialização.";
+    registrarErro("Inicialização", mensagem, error instanceof Error ? error.stack : String(error));
+    if (mainWindow && !mainWindow.isDestroyed()) mainWindow.destroy();
+    mainWindow = null;
+    enviarStatusInicializacao({
+      estado: "erro",
+      titulo: "Não foi possível iniciar o EasyLib",
+      detalhe: mensagem,
+    });
+  } finally {
+    inicializando = false;
+  }
+};
+
+ipcMain.on("startup:retry", () => { void iniciarAplicacao(); });
+ipcMain.on("startup:close", () => app.quit());
+
+app.whenReady().then(() => { void iniciarAplicacao(); });
+app.on("window-all-closed", () => {
+  if (process.platform !== "darwin") app.quit();
 });
 
 ipcMain.handle("registrar-debug", (_event, origem: string, mensagem: string, detalhes?: string) => {
@@ -76,27 +266,7 @@ ipcMain.handle("copiar-logs-debug", () => {
 });
 ipcMain.handle("obter-configuracao", async () => {
   try {
-    const configuracao = await prisma.configuracao.upsert({
-      where: { id: 1 },
-      update: {},
-      create: {
-        id: 1,
-        termoResponsabilidadeAtivo: true,
-        responsavelBiblioteca: "",
-        modeloTermo: MODELO_TERMO_PADRAO,
-        paresTermosPorFolha: 2,
-        tipoFolha: "A4",
-        painelDebugAtivo: true,
-        modoEscuro: false,
-      },
-    });
-    return {
-      success: true,
-      data: {
-        ...configuracao,
-        modeloTermo: configuracao.modeloTermo || MODELO_TERMO_PADRAO,
-      },
-    };
+    return { success: true, data: await obterConfiguracaoPersistida() };
   } catch (e) {
     return erro(e);
   }
