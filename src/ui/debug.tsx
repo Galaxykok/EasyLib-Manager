@@ -12,6 +12,11 @@ type LogDebug = {
 
 type TipoLimpeza = "movimentacoes" | "emprestimos" | "alunos" | "acervo";
 
+type ConfirmacaoLimpeza = {
+    tipo: TipoLimpeza;
+    titulo: string;
+};
+
 const opcoesLimpeza: Array<{
     tipo: TipoLimpeza;
     titulo: string;
@@ -43,7 +48,9 @@ export default function Debug() {
     const [logs, setLogs] = useState<LogDebug[]>([]);
     const [carregando, setCarregando] = useState(true);
     const [retorno, setRetorno] = useState("");
+    const [erro, setErro] = useState("");
     const [limpando, setLimpando] = useState<TipoLimpeza | null>(null);
+    const [confirmacaoLimpeza, setConfirmacaoLimpeza] = useState<ConfirmacaoLimpeza | null>(null);
     const [debugAtivo, setDebugAtivo] = useState<boolean | null>(null);
 
     const atualizar = async () => {
@@ -89,24 +96,37 @@ export default function Debug() {
         }
     };
 
-    const limparDados = async (tipo: TipoLimpeza, titulo: string) => {
-        const confirmou = window.confirm(
-            `${titulo}?\n\nEsta ação apaga os registros selecionados e não pode ser desfeita.`,
-        );
-        if (!confirmou) return;
+    const solicitarLimpeza = (tipo: TipoLimpeza, titulo: string) => {
+        setErro("");
+        setConfirmacaoLimpeza({ tipo, titulo });
+    };
 
+    const limparDados = async () => {
+        if (!confirmacaoLimpeza) return;
+
+        const { tipo } = confirmacaoLimpeza;
+
+        setErro("");
+        setRetorno("");
         setLimpando(tipo);
         try {
             const resposta = await window.electronAPI.limparDados(tipo);
             if (!resposta.success) {
-                alert(resposta.error || "Não foi possível limpar os dados.");
+                setErro(resposta.error || "Não foi possível limpar os dados.");
                 return;
             }
             setRetorno(`${resposta.quantidade || 0} registro(s) removido(s).`);
             await atualizar();
             window.setTimeout(() => setRetorno(""), 3000);
+        } catch (falha) {
+            setErro(
+                falha instanceof Error
+                    ? falha.message
+                    : "Não foi possível limpar os dados.",
+            );
         } finally {
             setLimpando(null);
+            setConfirmacaoLimpeza(null);
         }
     };
 
@@ -147,6 +167,11 @@ export default function Debug() {
                 {retorno && (
                     <div className="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 font-medium text-emerald-800 shadow-sm" role="status">
                         {retorno}
+                    </div>
+                )}
+                {erro && (
+                    <div className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-medium text-red-800 shadow-sm" role="alert">
+                        {erro}
                     </div>
                 )}
                 <section className="h-[45vh] min-h-72 overflow-auto rounded-2xl border border-slate-800 bg-slate-950 p-5 font-mono text-slate-100 shadow-lg">
@@ -196,7 +221,7 @@ export default function Debug() {
                                 <button
                                     type="button"
                                     disabled={limpando !== null}
-                                    onClick={() => limparDados(opcao.tipo, opcao.titulo)}
+                                    onClick={() => solicitarLimpeza(opcao.tipo, opcao.titulo)}
                                     className="shrink-0 cursor-pointer rounded-xl border border-red-200 bg-white px-4 py-2 font-semibold text-red-700 transition hover:border-red-700 hover:bg-red-700 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
                                 >
                                     {limpando === opcao.tipo ? "Limpando..." : "Limpar"}
@@ -207,6 +232,52 @@ export default function Debug() {
                 </section>
                 </div>
             </main>
+            {confirmacaoLimpeza && (
+                <div
+                    className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+                    role="presentation"
+                >
+                    <section
+                        aria-describedby="confirmacao-limpeza-descricao"
+                        aria-labelledby="confirmacao-limpeza-titulo"
+                        aria-modal="true"
+                        className="w-full max-w-md rounded-2xl border border-red-200 bg-white p-6 shadow-2xl"
+                        role="dialog"
+                    >
+                        <div className="mb-5 flex items-start gap-4">
+                            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-red-100 font-bold text-red-700" aria-hidden="true">!</div>
+                            <div>
+                                <p className="text-xs font-semibold tracking-[0.15em] text-red-600">CONFIRMAR LIMPEZA</p>
+                                <h2 id="confirmacao-limpeza-titulo" className="mt-1 text-xl font-semibold text-slate-900">
+                                    {confirmacaoLimpeza.titulo}?
+                                </h2>
+                                <p id="confirmacao-limpeza-descricao" className="mt-2 text-sm leading-relaxed text-slate-600">
+                                    Esta ação apaga os registros selecionados e não pode ser desfeita.
+                                </p>
+                            </div>
+                        </div>
+                        <div className="flex justify-end gap-3">
+                            <button
+                                type="button"
+                                disabled={limpando !== null}
+                                onClick={() => setConfirmacaoLimpeza(null)}
+                                className="cursor-pointer rounded-xl border border-slate-200 px-4 py-2.5 font-semibold text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                                autoFocus
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="button"
+                                disabled={limpando !== null}
+                                onClick={limparDados}
+                                className="cursor-pointer rounded-xl bg-red-700 px-4 py-2.5 font-semibold text-white transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                                {limpando ? "Limpando..." : "Sim, limpar"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
         </div>
     );
 }

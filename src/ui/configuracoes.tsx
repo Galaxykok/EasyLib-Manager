@@ -87,12 +87,19 @@ export default function Configuracoes() {
     const [carregando, setCarregando] = useState(true);
     const [salvando, setSalvando] = useState(false);
     const [mensagem, setMensagem] = useState("");
+    const [erro, setErro] = useState("");
+    const [backupSelecionado, setBackupSelecionado] = useState<ResumoBackupSelecionado | null>(null);
+    const [selecionandoBackup, setSelecionandoBackup] = useState(false);
+    const [importandoBackup, setImportandoBackup] = useState(false);
     const editorRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
         window.electronAPI.obterConfiguracao().then((resposta) => {
             if (resposta.success && resposta.data) setConfiguracao(resposta.data);
-            else alert(resposta.error || "Não foi possível carregar as configurações.");
+            else setErro(resposta.error || "Não foi possível carregar as configurações.");
+            setCarregando(false);
+        }).catch((falha) => {
+            setErro(falha instanceof Error ? falha.message : "Não foi possível carregar as configurações.");
             setCarregando(false);
         });
     }, []);
@@ -119,20 +126,68 @@ export default function Configuracoes() {
             configuracao.termoResponsabilidadeAtivo &&
             !configuracao.responsavelBiblioteca.trim()
         ) {
-            alert("Informe o nome do responsável pela biblioteca.");
+            setErro("Informe o nome do responsável pela biblioteca.");
             return;
         }
         setSalvando(true);
-        const resposta = await window.electronAPI.salvarConfiguracao(configuracao);
-        setSalvando(false);
-        if (!resposta.success) {
-            alert(resposta.error || "Não foi possível salvar as configurações.");
-            return;
+        setErro("");
+        try {
+            const resposta = await window.electronAPI.salvarConfiguracao(configuracao);
+            if (!resposta.success) {
+                setErro(resposta.error || "Não foi possível salvar as configurações.");
+                return;
+            }
+            if (resposta.data) setConfiguracao(resposta.data);
+            window.dispatchEvent(new Event("configuracao-atualizada"));
+            setMensagem("Configurações salvas.");
+            window.setTimeout(() => setMensagem(""), 3000);
+        } catch (falha) {
+            setErro(falha instanceof Error ? falha.message : "Não foi possível salvar as configurações.");
+        } finally {
+            setSalvando(false);
         }
-        if (resposta.data) setConfiguracao(resposta.data);
-        window.dispatchEvent(new Event("configuracao-atualizada"));
-        setMensagem("Configurações salvas.");
-        window.setTimeout(() => setMensagem(""), 3000);
+    };
+
+    const selecionarBackup = async () => {
+        setSelecionandoBackup(true);
+        setErro("");
+        try {
+            const resposta = await window.electronAPI.selecionarBackupTotal();
+            if (!resposta.success) {
+                setErro(resposta.error || "Não foi possível validar o backup selecionado.");
+                return;
+            }
+            if (!resposta.cancelado && resposta.data) setBackupSelecionado(resposta.data);
+        } catch (falha) {
+            setErro(falha instanceof Error ? falha.message : "Não foi possível selecionar o backup.");
+        } finally {
+            setSelecionandoBackup(false);
+        }
+    };
+
+    const importarBackup = async () => {
+        if (!backupSelecionado || importandoBackup) return;
+        setImportandoBackup(true);
+        setErro("");
+        try {
+            const resposta = await window.electronAPI.confirmarImportacaoTotal(backupSelecionado.token);
+            if (!resposta.success) {
+                setErro(resposta.error || "Não foi possível importar o backup.");
+                setBackupSelecionado(null);
+                return;
+            }
+            setBackupSelecionado(null);
+            setMensagem(
+                resposta.caminhoRecuperacao
+                    ? `Backup importado. Cópia de recuperação salva em: ${resposta.caminhoRecuperacao}. Recarregando os dados...`
+                    : "Backup importado. Recarregando os dados...",
+            );
+            window.setTimeout(() => window.location.reload(), 3500);
+        } catch (falha) {
+            setErro(falha instanceof Error ? falha.message : "Não foi possível importar o backup.");
+        } finally {
+            setImportandoBackup(false);
+        }
     };
 
     return (
@@ -150,6 +205,20 @@ export default function Configuracoes() {
                         <p className="text-cyan-50/85 mt-2">Personalize termos, impressão e ferramentas do sistema.</p>
                     </div>
                 </header>
+
+                {erro && (
+                    <div role="alert" className="mb-6 flex items-center justify-between gap-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+                        <span>{erro}</span>
+                        <button
+                            type="button"
+                            onClick={() => setErro("")}
+                            aria-label="Fechar aviso de erro"
+                            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-lg opacity-70 hover:bg-red-100 hover:opacity-100"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                )}
 
                 {carregando ? (
                     <div className="rounded-2xl border-2 border-cyan-200 bg-cyan-50 p-8 text-cyan-900 shadow-sm">Carregando configurações...</div>
@@ -292,6 +361,26 @@ export default function Configuracoes() {
                             />
                         </section>
 
+                        <section className="app-panel rounded-xl border-2 border-amber-200 p-6">
+                            <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                                <div>
+                                    <p className="text-xs font-semibold tracking-[0.15em] text-amber-700">MANUTENÇÃO E ATUALIZAÇÃO</p>
+                                    <h2 className="mt-1 text-xl font-semibold text-slate-900">Importação total do sistema</h2>
+                                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-500">
+                                        Restaure leitores, acervo, empréstimos, configurações e movimentações a partir de um backup total. Antes da troca, o sistema cria automaticamente uma cópia de recuperação dos dados atuais.
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={selecionarBackup}
+                                    disabled={selecionandoBackup || importandoBackup}
+                                    className="shrink-0 rounded-xl border border-amber-300 bg-amber-50 px-5 py-3 font-semibold text-amber-900 transition hover:bg-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {selecionandoBackup ? "Selecionando..." : "Selecionar backup total"}
+                                </button>
+                            </div>
+                        </section>
+
                         <div className="app-panel sticky bottom-4 z-10 flex items-center justify-between gap-4 rounded-xl px-5 py-4">
                             <p className="hidden text-sm text-slate-500 sm:block">O tema muda na hora; salve para manter todas as alterações.</p>
                             <div className="flex items-center gap-4">
@@ -303,12 +392,69 @@ export default function Configuracoes() {
                             >
                                 {salvando ? "Salvando..." : "Salvar configurações"}
                             </button>
-                            {mensagem && <span className="font-medium text-emerald-700" role="status">{mensagem}</span>}
+                            {mensagem && <span className="break-all text-sm font-medium text-emerald-700" role="status">{mensagem}</span>}
                             </div>
                         </div>
                     </div>
                 )}
                 </div>
+
+                {backupSelecionado && (
+                    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/60 p-4" role="presentation">
+                        <section
+                            role="dialog"
+                            aria-modal="true"
+                            aria-labelledby="titulo-confirmar-importacao"
+                            className="app-panel max-h-[90vh] w-full max-w-xl overflow-y-auto rounded-2xl border-2 border-amber-300 p-6 shadow-2xl"
+                        >
+                            <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Confirmação necessária</p>
+                            <h2 id="titulo-confirmar-importacao" className="mt-1 text-2xl font-semibold text-slate-900">Substituir todos os dados?</h2>
+                            <p className="mt-3 text-sm leading-relaxed text-slate-600">
+                                O backup foi criado em {new Date(backupSelecionado.criadoEm).toLocaleString("pt-BR")} pela versão {backupSelecionado.versaoAplicativo}. A importação substitui a base atual inteira.
+                            </p>
+                            <dl className="mt-5 grid grid-cols-2 gap-3 rounded-xl bg-amber-50 p-4 text-sm sm:grid-cols-4">
+                                {[
+                                    ["Leitores", backupSelecionado.quantidades.alunos],
+                                    ["Livros", backupSelecionado.quantidades.livros],
+                                    ["Empréstimos", backupSelecionado.quantidades.emprestimos],
+                                    ["Movimentações", backupSelecionado.quantidades.movimentacoes],
+                                ].map(([rotulo, quantidade]) => (
+                                    <div key={String(rotulo)}>
+                                        <dt className="text-xs font-semibold uppercase tracking-wide text-slate-500">{rotulo}</dt>
+                                        <dd className="mt-1 text-xl font-bold text-slate-900">{quantidade}</dd>
+                                    </div>
+                                ))}
+                            </dl>
+                            <p className="mt-4 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-900">
+                                Uma cópia de recuperação da base atual será salva automaticamente antes da importação.
+                            </p>
+                            {erro && (
+                                <p role="alert" className="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+                                    {erro}
+                                </p>
+                            )}
+                            <div className="mt-6 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setBackupSelecionado(null)}
+                                    disabled={importandoBackup}
+                                    className="rounded-xl bg-slate-200 px-5 py-3 font-semibold text-slate-700 hover:bg-slate-300 disabled:opacity-50"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="button"
+                                    autoFocus
+                                    onClick={importarBackup}
+                                    disabled={importandoBackup}
+                                    className="rounded-xl bg-red-600 px-5 py-3 font-semibold text-white hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-60"
+                                >
+                                    {importandoBackup ? "Importando..." : "Sim, substituir e importar"}
+                                </button>
+                            </div>
+                        </section>
+                    </div>
+                )}
             </main>
         </div>
     );

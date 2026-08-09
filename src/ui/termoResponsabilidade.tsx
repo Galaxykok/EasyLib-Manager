@@ -12,6 +12,14 @@ export default function TermoResponsabilidade() {
     const navigate = useNavigate();
     const termo = (location.state as { termo?: TermoGerado } | null)?.termo;
 
+    const imprimir = () => {
+        try {
+            window.print();
+        } finally {
+            void window.electronAPI.restaurarFoco();
+        }
+    };
+
     if (!termo) {
         return (
             <main className="min-h-screen flex flex-col items-center justify-center gap-4 p-8">
@@ -44,7 +52,7 @@ export default function TermoResponsabilidade() {
                         Folha {folha.rotulo} · capacidade de {paresPorFolha} par(es) por folha
                     </span>
                 </div>
-                <button type="button" onClick={() => window.print()} className="px-5 py-2 rounded bg-green-700 hover:bg-green-800 text-white cursor-pointer">Imprimir 2 vias</button>
+                <button type="button" onClick={imprimir} className="px-5 py-2 rounded bg-green-700 hover:bg-green-800 text-white cursor-pointer">Imprimir 2 vias</button>
             </div>
 
             <div className="folha-termos bg-white mx-auto shadow print:shadow-none" style={estiloFolha}>

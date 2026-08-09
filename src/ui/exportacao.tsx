@@ -21,6 +21,11 @@ type DadosExportacao = {
 
 type TipoExportacao = keyof DadosExportacao;
 
+type Feedback = {
+    tipo: "sucesso" | "erro" | "informacao";
+    mensagem: string;
+};
+
 type OpcaoExportacao = {
     tipo: TipoExportacao;
     titulo: string;
@@ -48,6 +53,13 @@ const rotulosMovimentacao: Record<string, string> = {
     DEVOLUCAO: "Devolução",
     EMPRESTIMO_EXCLUIDO: "Empréstimo excluído",
 };
+
+const humanizarMovimentacao = (tipo: string) =>
+    rotulosMovimentacao[tipo]
+    || tipo
+        .toLocaleLowerCase("pt-BR")
+        .replaceAll("_", " ")
+        .replace(/^./, (primeiraLetra) => primeiraLetra.toLocaleUpperCase("pt-BR"));
 
 const opcoes: OpcaoExportacao[] = [
     {
@@ -155,22 +167,34 @@ function IconeSetaDireita() {
     );
 }
 
+function IconeBackup() {
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-7 w-7">
+            <path d="M5 3h12l3 3v15H5V3Z" strokeWidth="1.8" strokeLinejoin="round" />
+            <path d="M8 3v6h8V3M8 21v-7h8v7" strokeWidth="1.8" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 export default function Exportacao() {
     const [inicio, setInicio] = useState("");
     const [fim, setFim] = useState("");
     const [todoPeriodo, setTodoPeriodo] = useState(true);
     const [exportando, setExportando] = useState<TipoExportacao | null>(null);
+    const [exportandoBackup, setExportandoBackup] = useState(false);
+    const [feedback, setFeedback] = useState<Feedback | null>(null);
 
     const exportar = async (tipo: TipoExportacao, nome: string) => {
         if (!todoPeriodo && !inicio && !fim) {
-            alert("Informe ao menos uma data ou marque “Todo o período”.");
+            setFeedback({ tipo: "erro", mensagem: "Informe ao menos uma data ou marque “Todo o período”." });
             return;
         }
         if (!todoPeriodo && inicio && fim && inicio > fim) {
-            alert("A data inicial não pode ser posterior à data final.");
+            setFeedback({ tipo: "erro", mensagem: "A data inicial não pode ser posterior à data final." });
             return;
         }
 
+        setFeedback(null);
         setExportando(tipo);
         try {
             const resposta = await window.electronAPI.obterExportacao(
@@ -178,7 +202,7 @@ export default function Exportacao() {
                 todoPeriodo ? undefined : fim || undefined,
             );
             if (!resposta.success || !resposta.data) {
-                alert(resposta.error || "Não foi possível gerar a planilha.");
+                setFeedback({ tipo: "erro", mensagem: resposta.error || "Não foi possível gerar a planilha." });
                 return;
             }
 
@@ -204,25 +228,36 @@ export default function Exportacao() {
                     : tipo === "movimentacoes"
                       ? (dados as Movimento[]).map((movimento) => ({
                             Data: formatarData(movimento.criadoEm),
-                            Tipo: rotulosMovimentacao[movimento.tipo] || movimento.tipo,
+                            Tipo: humanizarMovimentacao(movimento.tipo),
                             Leitor: movimento.alunoNome || "",
                             Livro: movimento.livroTitulo || "",
                             Descrição: movimento.descricao,
                         }))
-                      : (dados as Emprestimo[]).map((emprestimo) => ({
-                            ID: emprestimo.id,
-                            Leitor: emprestimo.aluno.nome,
-                            Tipo: emprestimo.aluno.tipo === "PROFESSOR" ? "Professor" : "Aluno",
-                            "Turma / identificação": emprestimo.aluno.serie,
-                            Livro: emprestimo.livro.titulo,
-                            ISBN: emprestimo.livro.isbn || "",
-                            "Estoque total": emprestimo.livro.unidade,
-                            "Disponíveis atualmente": emprestimo.livro.disponiveis,
-                            "Data do empréstimo": formatarData(emprestimo.dataHoraEmprestimo),
-                            "Devolução prevista": formatarData(emprestimo.dataDevolucaoPrevista),
-                            "Estado no empréstimo": emprestimo.estadoLivro || "Não informado",
-                            Status: rotulosStatus[emprestimo.status] || emprestimo.status,
-                        }));
+                      : (dados as Emprestimo[]).map((emprestimo) => {
+                            const registro = emprestimo as Emprestimo & {
+                                quantidade?: number;
+                                quantidadeDevolvida?: number;
+                            };
+                            const quantidade = registro.quantidade ?? 1;
+                            const quantidadeDevolvida = registro.quantidadeDevolvida ?? (emprestimo.status === "DEVOLVIDO" ? quantidade : 0);
+                            return {
+                                ID: emprestimo.id,
+                                Leitor: emprestimo.aluno.nome,
+                                Tipo: emprestimo.aluno.tipo === "PROFESSOR" ? "Professor" : "Aluno",
+                                "Turma / identificação": emprestimo.aluno.serie,
+                                Livro: emprestimo.livro.titulo,
+                                ISBN: emprestimo.livro.isbn || "",
+                                Quantidade: quantidade,
+                                "Quantidade devolvida": quantidadeDevolvida,
+                                "Quantidade pendente": Math.max(0, quantidade - quantidadeDevolvida),
+                                "Estoque total": emprestimo.livro.unidade,
+                                "Disponíveis atualmente": emprestimo.livro.disponiveis,
+                                "Data do empréstimo": formatarData(emprestimo.dataHoraEmprestimo),
+                                "Devolução prevista": formatarData(emprestimo.dataDevolucaoPrevista),
+                                "Estado no empréstimo": emprestimo.estadoLivro || "Não informado",
+                                Status: rotulosStatus[emprestimo.status] || emprestimo.status,
+                            };
+                        });
 
             const planilha = XLSX.utils.json_to_sheet(linhas);
             planilha["!cols"] = Object.keys(linhas[0] || { Resultado: "" }).map((coluna) => ({
@@ -240,11 +275,45 @@ export default function Exportacao() {
                 ? "todo-periodo"
                 : `${inicio || "inicio"}-a-${fim || "hoje"}`;
             XLSX.writeFile(arquivo, `${nome.toLowerCase().replaceAll(" ", "-")}-${sufixo}.xlsx`);
+            setFeedback({ tipo: "sucesso", mensagem: `A planilha “${nome}” foi gerada com sucesso.` });
         } catch (erro) {
             console.error("Erro ao exportar planilha:", erro);
-            alert("Não foi possível gerar a planilha.");
+            setFeedback({ tipo: "erro", mensagem: "Não foi possível gerar a planilha." });
         } finally {
             setExportando(null);
+        }
+    };
+
+    const exportarBackupTotal = async () => {
+        setFeedback(null);
+        setExportandoBackup(true);
+        try {
+            const api = window.electronAPI as typeof window.electronAPI & {
+                exportarBackupTotal: () => Promise<{
+                    success: boolean;
+                    cancelado?: boolean;
+                    caminho?: string;
+                    error?: string;
+                }>;
+            };
+            const resposta = await api.exportarBackupTotal();
+            if (resposta.cancelado) {
+                setFeedback({ tipo: "informacao", mensagem: "A exportação do backup foi cancelada." });
+            } else if (!resposta.success) {
+                setFeedback({ tipo: "erro", mensagem: resposta.error || "Não foi possível criar o backup total." });
+            } else {
+                setFeedback({
+                    tipo: "sucesso",
+                    mensagem: resposta.caminho
+                        ? `Backup total salvo em: ${resposta.caminho}`
+                        : "Backup total salvo com sucesso.",
+                });
+            }
+        } catch (erro) {
+            console.error("Erro ao exportar backup total:", erro);
+            setFeedback({ tipo: "erro", mensagem: "Não foi possível criar o backup total." });
+        } finally {
+            setExportandoBackup(false);
         }
     };
 
@@ -334,6 +403,49 @@ export default function Exportacao() {
                             <p className="mt-4 text-sm leading-relaxed text-slate-500">
                                 O período filtra empréstimos pela data de registro e movimentações pela data do evento. O acervo atual sempre representa a situação de hoje.
                             </p>
+                        </div>
+                    </section>
+
+                    {feedback ? (
+                        <div
+                            role={feedback.tipo === "erro" ? "alert" : "status"}
+                            className={`mb-8 rounded-xl border px-4 py-3 text-sm font-medium break-words ${
+                                feedback.tipo === "sucesso"
+                                    ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+                                    : feedback.tipo === "erro"
+                                      ? "border-red-200 bg-red-50 text-red-800"
+                                      : "border-sky-200 bg-sky-50 text-sky-800"
+                            }`}
+                        >
+                            {feedback.mensagem}
+                        </div>
+                    ) : null}
+
+                    <section className="app-panel mb-8 rounded-xl border border-cyan-200 p-5 sm:p-6">
+                        <div className="flex flex-col gap-5 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex min-w-0 items-start gap-4">
+                                <span className="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-xl bg-cyan-100 text-cyan-800">
+                                    <IconeBackup />
+                                </span>
+                                <div>
+                                    <p className="text-xs font-bold uppercase tracking-[0.15em] text-cyan-700">Manutenção e atualização</p>
+                                    <h2 className="mt-1 text-2xl font-semibold text-slate-900">Backup total do sistema</h2>
+                                    <p className="mt-1 max-w-2xl text-sm leading-relaxed text-slate-600">
+                                        Salva acervo, leitores, empréstimos, movimentações e configurações em um único arquivo para restauração em outra versão do sistema.
+                                    </p>
+                                </div>
+                            </div>
+                            <button
+                                type="button"
+                                disabled={exportandoBackup || exportando !== null}
+                                onClick={exportarBackupTotal}
+                                className="app-primary-action inline-flex min-h-12 flex-shrink-0 items-center justify-center gap-2 rounded-xl px-5 py-3 font-semibold text-white disabled:cursor-wait disabled:opacity-60"
+                            >
+                                {exportandoBackup ? (
+                                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                ) : null}
+                                {exportandoBackup ? "Criando backup..." : "Exportar backup total"}
+                            </button>
                         </div>
                     </section>
 

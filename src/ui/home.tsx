@@ -6,6 +6,41 @@ import Sidebar from "./sidebar.tsx";
 const formatarData = (valor: Date | string | null) =>
     valor ? new Date(valor).toLocaleDateString("pt-BR") : "Sem prazo";
 
+type SituacaoPrazo = "em-dia" | "na-semana" | "atrasado";
+
+const obterLimitesSemanaAtual = () => {
+    const agora = new Date();
+    const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const diasDesdeSegunda = (inicioHoje.getDay() + 6) % 7;
+    const inicioSemana = new Date(inicioHoje);
+    inicioSemana.setDate(inicioSemana.getDate() - diasDesdeSegunda);
+    const fimSemana = new Date(inicioSemana);
+    fimSemana.setDate(fimSemana.getDate() + 7);
+    return { inicioHoje, inicioSemana, fimSemana };
+};
+
+const obterSituacaoPrazo = (emprestimo: Emprestimo): SituacaoPrazo => {
+    const prazo = emprestimo.dataDevolucaoPrevista
+        ? new Date(emprestimo.dataDevolucaoPrevista)
+        : null;
+    if (!prazo) return "em-dia";
+
+    const dataPrazo = new Date(prazo.getFullYear(), prazo.getMonth(), prazo.getDate());
+    const { inicioHoje, inicioSemana, fimSemana } = obterLimitesSemanaAtual();
+    if (emprestimo.status === "ATRASADO" || dataPrazo < inicioHoje) return "atrasado";
+    if (dataPrazo >= inicioSemana && dataPrazo < fimSemana) return "na-semana";
+    return "em-dia";
+};
+
+const obterQuantidadeRestante = (emprestimo: Emprestimo) => {
+    const registro = emprestimo as Emprestimo & {
+        quantidade?: number;
+        quantidadeDevolvida?: number;
+    };
+    if (registro.quantidade === undefined && registro.quantidadeDevolvida === undefined) return null;
+    return Math.max(0, (registro.quantidade ?? 1) - (registro.quantidadeDevolvida ?? 0));
+};
+
 type TipoIconeEstatistica = "mes" | "hoje" | "livro" | "serie" | "leitor";
 type TipoSaudacao = "manha" | "tarde" | "noite";
 
@@ -58,10 +93,9 @@ export default function Home() {
     }, []);
 
     const proximos = useMemo(() =>
-        emprestimos
-            .filter((emprestimo) => emprestimo.dataDevolucaoPrevista)
-            .sort((a, b) => new Date(a.dataDevolucaoPrevista!).getTime() - new Date(b.dataDevolucaoPrevista!).getTime())
-            .slice(0, 7),
+        [...emprestimos]
+            .filter((emprestimo) => emprestimo.dataDevolucaoPrevista && emprestimo.status !== "DEVOLVIDO")
+            .sort((a, b) => new Date(a.dataDevolucaoPrevista!).getTime() - new Date(b.dataDevolucaoPrevista!).getTime()),
     [emprestimos]);
 
     const estatisticas = [
@@ -117,7 +151,12 @@ export default function Home() {
                                 </div>
                                 <Link to="/emprestimos" className="text-sm font-semibold text-cyan-300 hover:text-cyan-100">Ver todos →</Link>
                             </header>
-                            <div className="divide-y divide-sky-200">
+                            <div className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-sky-200 bg-sky-50 px-6 py-3 text-xs font-medium text-slate-600" aria-label="Legenda dos prazos">
+                                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />Empréstimo em dia</span>
+                                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-amber-400" />Devolução nesta semana</span>
+                                <span className="flex items-center gap-2"><span className="h-2.5 w-2.5 rounded-full bg-red-500" />Devolução atrasada</span>
+                            </div>
+                            <div className="max-h-[28rem] divide-y divide-sky-200 overflow-y-auto overscroll-contain">
                                 {carregando ? (
                                     <p className="p-6 text-slate-500">Carregando painel...</p>
                                 ) : proximos.length === 0 ? (
@@ -126,16 +165,40 @@ export default function Home() {
                                         Nenhuma devolução pendente com prazo definido.
                                     </div>
                                 ) : proximos.map((emprestimo) => {
-                                    const atrasado = emprestimo.status === "ATRASADO";
+                                    const situacao = obterSituacaoPrazo(emprestimo);
+                                    const quantidadeRestante = obterQuantidadeRestante(emprestimo);
+                                    const classesSituacao: Record<SituacaoPrazo, { bolinha: string; etiqueta: string; prefixo: string }> = {
+                                        "em-dia": {
+                                            bolinha: "bg-emerald-500",
+                                            etiqueta: "bg-emerald-50 text-emerald-700",
+                                            prefixo: "Até ",
+                                        },
+                                        "na-semana": {
+                                            bolinha: "bg-amber-400",
+                                            etiqueta: "bg-amber-50 text-amber-700",
+                                            prefixo: "Nesta semana · ",
+                                        },
+                                        atrasado: {
+                                            bolinha: "bg-red-500",
+                                            etiqueta: "bg-red-50 text-red-700",
+                                            prefixo: "Atrasado · ",
+                                        },
+                                    };
+                                    const visual = classesSituacao[situacao];
                                     return (
                                         <div key={emprestimo.id} className="flex items-center gap-4 px-6 py-4 hover:bg-cyan-100/70 transition-colors">
-                                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${atrasado ? "bg-red-500" : "bg-amber-400"}`} />
+                                            <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${visual.bolinha}`} />
                                             <div className="min-w-0 flex-1">
                                                 <strong className="block truncate">{emprestimo.livro.titulo}</strong>
-                                                <span className="text-sm text-slate-500">{emprestimo.aluno.nome} · {emprestimo.aluno.serie || "Sem turma"}</span>
+                                                <span className="text-sm text-slate-500">
+                                                    {emprestimo.aluno.nome} · {emprestimo.aluno.serie || "Sem turma"}
+                                                    {quantidadeRestante !== null
+                                                        ? ` · ${quantidadeRestante} ${quantidadeRestante === 1 ? "unidade pendente" : "unidades pendentes"}`
+                                                        : ""}
+                                                </span>
                                             </div>
-                                            <span className={`text-sm font-medium px-3 py-1.5 rounded-full ${atrasado ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"}`}>
-                                                {atrasado ? "Atrasado · " : "Até "}{formatarData(emprestimo.dataDevolucaoPrevista)}
+                                            <span className={`whitespace-nowrap text-sm font-medium px-3 py-1.5 rounded-full ${visual.etiqueta}`}>
+                                                {visual.prefixo}{formatarData(emprestimo.dataDevolucaoPrevista)}
                                             </span>
                                         </div>
                                     );

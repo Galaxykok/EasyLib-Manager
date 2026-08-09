@@ -7,12 +7,16 @@ datasource db {
 }
 
 model Aluno {
-  id          Int          @id @default(autoincrement())
-  nome        String
-  serie       String       @default("")
-  tipo        TipoLeitor   @default(ALUNO)
-  emprestimos Emprestimo[]
+  id               Int          @id @default(autoincrement())
+  nome             String
+  serie            String       @default("")
+  tipo             TipoLeitor   @default(ALUNO)
+  ativo             Boolean      @default(true)
+  banidoAte         DateTime?
+  motivoBanimento   String?
+  emprestimos       Emprestimo[]
 
+  @@index([ativo, nome])
   @@map("alunos")
 }
 
@@ -35,15 +39,20 @@ model Livro {
 
 model Emprestimo {
   id                    Int              @id @default(autoincrement())
+  grupoId               String           @default("")
   alunoId               Int              @map("id_aluno")
   livroId               Int              @map("id_livro")
+  quantidade            Int              @default(1)
+  quantidadeDevolvida   Int              @default(0)
   dataHoraEmprestimo    DateTime         @default(now())
   dataDevolucaoPrevista DateTime?
+  devolvidoEm           DateTime?
   status                StatusEmprestimo @default(ATIVO)
   estadoLivro           String           @default("")
   aluno                 Aluno            @relation(fields: [alunoId], references: [id])
   livro                 Livro            @relation(fields: [livroId], references: [id])
 
+  @@index([grupoId])
   @@map("emprestimos")
 }
 
@@ -90,7 +99,19 @@ enum TipoLeitor {
 
 enum TipoMovimentacao {
   LIVRO_ADICIONADO
+  LIVRO_ATUALIZADO
+  LIVRO_EXCLUIDO
+  ALUNO_CADASTRADO
+  ALUNO_ATUALIZADO
+  ALUNO_ARQUIVADO
+  BANIMENTO_APLICADO
+  BANIMENTO_REMOVIDO
   EMPRESTIMO_CRIADO
   DEVOLUCAO
+  DEVOLUCAO_PARCIAL
   EMPRESTIMO_EXCLUIDO
+  CONFIGURACAO_ATUALIZADA
+  BACKUP_EXPORTADO
+  BACKUP_IMPORTADO
+  DADOS_LIMPOS
 }

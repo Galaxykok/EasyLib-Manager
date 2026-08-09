@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Sidebar from "./sidebar.tsx";
 import { chaveSerie, normalizarSerie } from "../shared/normalizacao.ts";
@@ -40,6 +40,47 @@ const obterStatus = (status: Emprestimo["status"]) => {
     };
 };
 
+const diasRestantesBanimento = (leitor: Pick<Aluno, "banidoAte">) => {
+    if (!leitor.banidoAte) return 0;
+    const diferenca = new Date(leitor.banidoAte).getTime() - Date.now();
+    return Number.isFinite(diferenca) && diferenca > 0
+        ? Math.max(1, Math.ceil(diferenca / (24 * 60 * 60 * 1000)))
+        : 0;
+};
+
+const emprestimoAtrasado = (emprestimo: Emprestimo) => {
+    if (emprestimo.status === "ATRASADO") return true;
+    if (!emprestimo.dataDevolucaoPrevista) return false;
+    const hoje = new Date();
+    hoje.setHours(0, 0, 0, 0);
+    return new Date(emprestimo.dataDevolucaoPrevista).getTime() < hoje.getTime();
+};
+
+type ConfirmacoesRegistro = Pick<
+    EmprestimoEntrada,
+    "confirmarMultiplosTitulos" | "confirmarEmprestimoPendente"
+>;
+
+type AvisoRegistro = {
+    codigo: "CONFIRMAR_MULTIPLOS_TITULOS" | "CONFIRMAR_EMPRESTIMO_PENDENTE";
+    mensagem: string;
+    confirmacoes: ConfirmacoesRegistro;
+};
+
+type BanimentoPendente = {
+    alunoId: number;
+    diasRestantes: number;
+    leitor: Aluno;
+};
+
+type DevolucaoPendente = {
+    emprestimo: Emprestimo;
+    quantidade: number;
+    etapa: "quantidade" | "perguntaPunicao" | "dadosPunicao";
+    diasPunicao: number;
+    motivoPunicao: string;
+};
+
 export default function Emprestimos() {
     const navigate = useNavigate();
     const [lista, setLista] = useState<Emprestimo[]>([]);
@@ -50,25 +91,49 @@ export default function Emprestimos() {
     const [leitorId, setLeitorId] = useState<number | undefined>();
     const [sugestoes, setSugestoes] = useState<Aluno[]>([]);
     const [selecionados, setSelecionados] = useState<number[]>([]);
+    const [quantidades, setQuantidades] = useState<Record<number, number>>({});
     const [estadosLivros, setEstadosLivros] = useState<Record<number, string>>({});
     const [prazo, setPrazo] = useState("");
     const [busca, setBusca] = useState("");
     const [buscaEmprestimos, setBuscaEmprestimos] = useState("");
     const [carregando, setCarregando] = useState(true);
     const [salvando, setSalvando] = useState(false);
+    const [salvandoDevolucao, setSalvandoDevolucao] = useState(false);
+    const [removendoBanimento, setRemovendoBanimento] = useState(false);
+    const [termoDisponivel, setTermoDisponivel] = useState<TermoGerado | null>(null);
+    const [avisoRegistro, setAvisoRegistro] = useState<AvisoRegistro | null>(null);
+    const [banimentoPendente, setBanimentoPendente] = useState<BanimentoPendente | null>(null);
+    const [devolucaoPendente, setDevolucaoPendente] = useState<DevolucaoPendente | null>(null);
+    const [erroTela, setErroTela] = useState("");
+    const [mensagemTela, setMensagemTela] = useState("");
+    const mainRef = useRef<HTMLElement>(null);
     const listaLivrosRef = useRef<HTMLDivElement>(null);
+    const posicaoScrollRef = useRef<number | null>(null);
+    const buscaLeitorRef = useRef(0);
 
     const carregar = async () => {
         setCarregando(true);
-        const [emprestimos, acervo] = await Promise.all([
-            window.electronAPI.obterEmprestimo(),
-            window.electronAPI.obterLivros(),
-        ]);
-        if (emprestimos.success && emprestimos.data) setLista(emprestimos.data);
-        else if (!emprestimos.success) alert(`Erro ao carregar empréstimos: ${emprestimos.error}`);
-        if (acervo.success && acervo.data) setLivros(acervo.data);
-        else if (!acervo.success) alert(`Erro ao carregar o acervo: ${acervo.error}`);
-        setCarregando(false);
+        setErroTela("");
+        try {
+            const [emprestimos, acervo] = await Promise.all([
+                window.electronAPI.obterEmprestimo(),
+                window.electronAPI.obterLivros(),
+            ]);
+            const erros: string[] = [];
+            if (emprestimos.success && emprestimos.data) setLista(emprestimos.data);
+            else if (!emprestimos.success) erros.push(`Erro ao carregar empréstimos: ${emprestimos.error}`);
+            if (acervo.success && acervo.data) setLivros(acervo.data);
+            else if (!acervo.success) erros.push(`Erro ao carregar o acervo: ${acervo.error}`);
+            if (erros.length > 0) setErroTela(erros.join(" "));
+        } catch (erro) {
+            setErroTela(
+                erro instanceof Error
+                    ? `Erro ao atualizar a tela: ${erro.message}`
+                    : "Erro inesperado ao atualizar a tela.",
+            );
+        } finally {
+            setCarregando(false);
+        }
     };
 
     useEffect(() => {
@@ -80,66 +145,300 @@ export default function Emprestimos() {
         listaLivrosRef.current?.scrollTo({ top: 0 });
     }, [busca]);
 
+    useLayoutEffect(() => {
+        const posicao = posicaoScrollRef.current;
+        const elemento = mainRef.current;
+        if (posicao === null || !elemento) return;
+        elemento.scrollTop = posicao;
+        const quadro = window.requestAnimationFrame(() => {
+            elemento.scrollTop = posicao;
+            posicaoScrollRef.current = null;
+        });
+        return () => window.cancelAnimationFrame(quadro);
+    }, [selecionados]);
+
+    const ajustarTipo = (novoTipo: "ALUNO" | "PROFESSOR") => {
+        setTipo(novoTipo);
+        if (novoTipo === "ALUNO") {
+            setQuantidades((atuais) => Object.fromEntries(
+                Object.keys(atuais).map((id) => [Number(id), 1]),
+            ));
+        }
+    };
+
+    const preencherLeitor = (leitor: Aluno) => {
+        setLeitorId(leitor.id);
+        setNome(leitor.nome);
+        setSerie(leitor.serie);
+        ajustarTipo(leitor.tipo);
+        setSugestoes([]);
+    };
+
+    const limparLeitor = () => {
+        buscaLeitorRef.current += 1;
+        setLeitorId(undefined);
+        setNome("");
+        setSerie("");
+        ajustarTipo("ALUNO");
+        setSugestoes([]);
+    };
+
     const procurarLeitor = async (valor: string) => {
         setNome(valor);
-        setLeitorId(undefined);
+        if (leitorId) {
+            setSugestoes([]);
+            return;
+        }
+        const identificadorBusca = ++buscaLeitorRef.current;
         if (valor.trim().length < 2) {
             setSugestoes([]);
             return;
         }
-        const resposta = await window.electronAPI.pesquisarAluno(valor);
-        setSugestoes(resposta.data || []);
+        try {
+            const resposta = await window.electronAPI.pesquisarAluno(valor);
+            if (identificadorBusca !== buscaLeitorRef.current) return;
+            if (!resposta.success) {
+                setSugestoes([]);
+                setErroTela(`Erro ao localizar leitores: ${resposta.error}`);
+                return;
+            }
+            setSugestoes(resposta.data || []);
+        } catch (erro) {
+            if (identificadorBusca !== buscaLeitorRef.current) return;
+            setSugestoes([]);
+            setErroTela(erro instanceof Error ? erro.message : "Não foi possível pesquisar os leitores.");
+        }
     };
 
     const selecionarLeitor = (leitor: Aluno) => {
-        setLeitorId(leitor.id);
-        setNome(leitor.nome);
-        setSerie(leitor.serie);
-        setTipo(leitor.tipo);
-        setSugestoes([]);
+        setErroTela("");
+        const diasRestantes = diasRestantesBanimento(leitor);
+        if (diasRestantes > 0) {
+            setSugestoes([]);
+            setBanimentoPendente({ alunoId: leitor.id, diasRestantes, leitor });
+            return;
+        }
+        preencherLeitor(leitor);
     };
 
-    const salvar = async () => {
+    const removerBanimento = async () => {
+        if (!banimentoPendente || removendoBanimento) return;
+        setRemovendoBanimento(true);
+        setErroTela("");
+        try {
+            const resposta = await window.electronAPI.removerBanimento({
+                alunoId: banimentoPendente.alunoId,
+                motivo: "Removido pelo bibliotecário durante a seleção para empréstimo",
+            });
+            if (!resposta.success) {
+                setErroTela(`Erro ao remover o banimento: ${resposta.error}`);
+                return;
+            }
+            preencherLeitor(resposta.data || {
+                ...banimentoPendente.leitor,
+                banidoAte: null,
+                motivoBanimento: null,
+            });
+            setBanimentoPendente(null);
+            setMensagemTela("Banimento removido. O leitor já pode realizar o empréstimo.");
+        } catch (erro) {
+            setErroTela(erro instanceof Error ? erro.message : "Não foi possível remover o banimento.");
+        } finally {
+            setRemovendoBanimento(false);
+        }
+    };
+
+    const alternarLivro = (livro: Livro) => {
+        const selecionado = selecionados.includes(livro.id);
+        if (!selecionado && livro.disponiveis <= 0) return;
+        posicaoScrollRef.current = mainRef.current?.scrollTop ?? null;
+        setSelecionados((atuais) =>
+            selecionado ? atuais.filter((id) => id !== livro.id) : [...atuais, livro.id],
+        );
+        setQuantidades((atuais) => {
+            const novas = { ...atuais };
+            if (selecionado) delete novas[livro.id];
+            else novas[livro.id] = 1;
+            return novas;
+        });
+        setEstadosLivros((atuais) => {
+            const novos = { ...atuais };
+            if (selecionado) delete novos[livro.id];
+            else novos[livro.id] = "";
+            return novos;
+        });
+    };
+
+    const salvar = async (confirmacoes: ConfirmacoesRegistro = {}) => {
         if (!nome.trim() || selecionados.length === 0 || salvando) return;
+        setTermoDisponivel(null);
+        setErroTela("");
+        setMensagemTela("");
         setSalvando(true);
         try {
             const resposta = await window.electronAPI.cadastrarEmprestimo({
-                leitor: { id: leitorId, nome, serie, tipo },
-                livros: selecionados,
-                estadosLivros,
+                leitor: { id: leitorId, nome: nome.trim(), serie: normalizarSerie(serie), tipo },
+                itens: selecionados.map((livroId) => ({
+                    livroId,
+                    quantidade: tipo === "ALUNO" ? 1 : quantidades[livroId] || 1,
+                    estadoLivro: estadosLivros[livroId]?.trim() || "",
+                })),
                 dataDevolucaoPrevista: prazo || null,
+                ...confirmacoes,
             });
             if (!resposta.success) {
-                alert(`Erro ao registrar empréstimo: ${resposta.error}`);
-                if (resposta.error?.includes("responsável pela biblioteca")) {
-                    navigate("/configuracoes");
+                if (
+                    resposta.codigo === "CONFIRMAR_MULTIPLOS_TITULOS"
+                    || resposta.codigo === "CONFIRMAR_EMPRESTIMO_PENDENTE"
+                ) {
+                    setAvisoRegistro({
+                        codigo: resposta.codigo,
+                        mensagem: resposta.error || "Deseja prosseguir com este empréstimo?",
+                        confirmacoes,
+                    });
+                    return;
                 }
+                if (resposta.codigo === "LEITOR_BANIDO" && resposta.alunoId) {
+                    setBanimentoPendente({
+                        alunoId: resposta.alunoId,
+                        diasRestantes: resposta.diasRestantes || 1,
+                        leitor: {
+                            id: resposta.alunoId,
+                            nome: nome.trim(),
+                            serie: normalizarSerie(serie),
+                            tipo,
+                            ativo: true,
+                            banidoAte: null,
+                            motivoBanimento: null,
+                        },
+                    });
+                    return;
+                }
+                setErroTela(`Erro ao registrar empréstimo: ${resposta.error}`);
                 return;
             }
-            const termo = resposta.data?.termo as TermoGerado | undefined;
+
+            const termo = resposta.data?.termo;
             setNome("");
             setSerie("");
+            setTipo("ALUNO");
             setLeitorId(undefined);
             setSelecionados([]);
+            setQuantidades({});
             setEstadosLivros({});
             setPrazo("");
             setSugestoes([]);
+            setAvisoRegistro(null);
+            setMensagemTela("Empréstimo registrado com sucesso.");
+            if (termo) setTermoDisponivel(termo);
             await carregar();
-            if (termo && window.confirm("Deseja imprimir o termo de responsabilidade?")) {
-                navigate("/termo-impressao", { state: { termo } });
-            }
+        } catch (erro) {
+            setErroTela(erro instanceof Error ? erro.message : "Não foi possível registrar o empréstimo.");
         } finally {
             setSalvando(false);
         }
     };
 
-    const devolver = async (emprestimo: Emprestimo) => {
-        const resposta = await window.electronAPI.confirmarDevolucao(emprestimo);
-        if (!resposta.success) {
-            alert(`Erro ao devolver livro: ${resposta.error}`);
+    const confirmarAvisoRegistro = () => {
+        if (!avisoRegistro) return;
+        const confirmacoes = {
+            ...avisoRegistro.confirmacoes,
+            ...(avisoRegistro.codigo === "CONFIRMAR_MULTIPLOS_TITULOS"
+                ? { confirmarMultiplosTitulos: true }
+                : { confirmarEmprestimoPendente: true }),
+        };
+        setAvisoRegistro(null);
+        void salvar(confirmacoes);
+    };
+
+    const abrirDevolucao = (emprestimo: Emprestimo) => {
+        const restante = Math.max(0, emprestimo.quantidade - emprestimo.quantidadeDevolvida);
+        if (restante === 0) return;
+        setErroTela("");
+        setMensagemTela("");
+        setDevolucaoPendente({
+            emprestimo,
+            quantidade: restante,
+            etapa: "quantidade",
+            diasPunicao: 1,
+            motivoPunicao: "Devolução realizada após o prazo",
+        });
+    };
+
+    const concluirDevolucao = async (aplicarPunicao: boolean) => {
+        if (!devolucaoPendente || salvandoDevolucao) return;
+        const restante = devolucaoPendente.emprestimo.quantidade
+            - devolucaoPendente.emprestimo.quantidadeDevolvida;
+        if (
+            !Number.isSafeInteger(devolucaoPendente.quantidade)
+            || devolucaoPendente.quantidade < 1
+            || devolucaoPendente.quantidade > restante
+        ) {
+            setErroTela(`Informe uma quantidade entre 1 e ${restante}.`);
             return;
         }
-        await carregar();
+        if (
+            aplicarPunicao
+            && (!Number.isSafeInteger(devolucaoPendente.diasPunicao)
+                || devolucaoPendente.diasPunicao < 1
+                || !devolucaoPendente.motivoPunicao.trim())
+        ) {
+            setErroTela("Informe a quantidade de dias e o motivo da punição.");
+            return;
+        }
+
+        setSalvandoDevolucao(true);
+        setErroTela("");
+        try {
+            const resposta = await window.electronAPI.confirmarDevolucao({
+                id: devolucaoPendente.emprestimo.id,
+                quantidade: devolucaoPendente.quantidade,
+                punicao: aplicarPunicao
+                    ? {
+                        dias: devolucaoPendente.diasPunicao,
+                        motivo: devolucaoPendente.motivoPunicao.trim(),
+                    }
+                    : null,
+            });
+            if (!resposta.success) {
+                setErroTela(`Erro ao registrar a devolução: ${resposta.error}`);
+                return;
+            }
+            const devolucaoCompleta = resposta.data?.devolucaoCompleta;
+            setDevolucaoPendente(null);
+            setMensagemTela(
+                devolucaoCompleta
+                    ? "Devolução concluída com sucesso."
+                    : "Devolução parcial registrada com sucesso.",
+            );
+            await carregar();
+        } catch (erro) {
+            setErroTela(erro instanceof Error ? erro.message : "Não foi possível registrar a devolução.");
+        } finally {
+            setSalvandoDevolucao(false);
+        }
+    };
+
+    const avancarDevolucao = () => {
+        if (!devolucaoPendente) return;
+        const restante = devolucaoPendente.emprestimo.quantidade
+            - devolucaoPendente.emprestimo.quantidadeDevolvida;
+        if (
+            !Number.isSafeInteger(devolucaoPendente.quantidade)
+            || devolucaoPendente.quantidade < 1
+            || devolucaoPendente.quantidade > restante
+        ) {
+            setErroTela(`Informe uma quantidade entre 1 e ${restante}.`);
+            return;
+        }
+        if (
+            devolucaoPendente.emprestimo.aluno.tipo === "ALUNO"
+            && emprestimoAtrasado(devolucaoPendente.emprestimo)
+        ) {
+            setDevolucaoPendente((atual) => atual ? { ...atual, etapa: "perguntaPunicao" } : atual);
+            return;
+        }
+        void concluirDevolucao(false);
     };
 
     const definirPrazo = (tipoPrazo: "7dias" | "15dias" | "1mes") => {
@@ -148,11 +447,7 @@ export default function Emprestimos() {
             const diaOriginal = data.getDate();
             data.setDate(1);
             data.setMonth(data.getMonth() + 1);
-            const ultimoDiaDoMes = new Date(
-                data.getFullYear(),
-                data.getMonth() + 1,
-                0,
-            ).getDate();
+            const ultimoDiaDoMes = new Date(data.getFullYear(), data.getMonth() + 1, 0).getDate();
             data.setDate(Math.min(diaOriginal, ultimoDiaDoMes));
         } else {
             data.setDate(data.getDate() + (tipoPrazo === "7dias" ? 7 : 15));
@@ -165,8 +460,8 @@ export default function Emprestimos() {
 
     const visiveis = livros.filter((livro) =>
         `${livro.titulo} ${livro.autor} ${livro.isbn || ""}`
-            .toLowerCase()
-            .includes(busca.toLowerCase()),
+            .toLocaleLowerCase("pt-BR")
+            .includes(busca.trim().toLocaleLowerCase("pt-BR")),
     );
     const termoBuscaEmprestimos = buscaEmprestimos.trim();
     const emprestimosVisiveis = lista.filter((emprestimo) => {
@@ -178,8 +473,17 @@ export default function Emprestimos() {
     });
     const podeRegistrar = Boolean(
         nome.trim()
+        && (tipo === "PROFESSOR" || serie.trim())
         && selecionados.length
-        && !selecionados.some((id) => !estadosLivros[id])
+        && !selecionados.some((id) => {
+            const livro = livros.find((item) => item.id === id);
+            const quantidade = tipo === "ALUNO" ? 1 : quantidades[id];
+            return !estadosLivros[id]?.trim()
+                || !livro
+                || !Number.isSafeInteger(quantidade)
+                || quantidade < 1
+                || quantidade > livro.disponiveis;
+        })
         && !salvando,
     );
 
@@ -187,13 +491,56 @@ export default function Emprestimos() {
         <div className="app-shell flex min-h-screen">
             <Sidebar />
 
-            <main className="app-main flex-1 overflow-y-auto p-8 xl:p-10">
+            <main
+                ref={mainRef}
+                className="app-main flex-1 overflow-y-auto p-8 xl:p-10"
+                style={{ overflowAnchor: "none" }}
+            >
                 <div className="mx-auto max-w-6xl">
                     <header className="app-page-header mb-7 p-6">
                         <p className="app-eyebrow mb-1 text-sm font-semibold tracking-[0.18em] text-cyan-700">CIRCULAÇÃO</p>
                         <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Empréstimos</h1>
-                        <p className="mt-2 text-slate-600">Registre retiradas, acompanhe prazos e gere termos de responsabilidade.</p>
+                        <p className="mt-2 text-slate-600">Registre retiradas, acompanhe prazos e gere termos de responsabilidade para alunos.</p>
                     </header>
+
+                    {erroTela && (
+                        <div role="alert" className="mb-5 flex flex-wrap items-center justify-between gap-4 rounded-xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-medium text-red-800">
+                            <span>{erroTela}</span>
+                            <span className="flex shrink-0 items-center gap-2">
+                                {erroTela.includes("responsável pela biblioteca") && (
+                                    <button
+                                        type="button"
+                                        onClick={() => navigate("/configuracoes")}
+                                        className="rounded-lg bg-red-700 px-3 py-1.5 text-xs font-semibold text-white hover:bg-red-800"
+                                    >
+                                        Abrir configurações
+                                    </button>
+                                )}
+                                <button
+                                    type="button"
+                                    onClick={() => setErroTela("")}
+                                    aria-label="Fechar aviso de erro"
+                                    className="flex h-6 w-6 items-center justify-center rounded text-lg opacity-70 hover:bg-red-100 hover:opacity-100"
+                                >
+                                    &times;
+                                </button>
+                            </span>
+                        </div>
+                    )}
+
+                    {mensagemTela && (
+                        <div role="status" className="mb-5 flex items-center justify-between gap-4 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-medium text-emerald-800">
+                            <span>{mensagemTela}</span>
+                            <button
+                                type="button"
+                                onClick={() => setMensagemTela("")}
+                                aria-label="Fechar confirmação"
+                                className="flex h-6 w-6 items-center justify-center rounded text-lg opacity-70 hover:bg-emerald-100 hover:opacity-100"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                    )}
 
                     <section className="mb-8 grid gap-6 lg:grid-cols-2">
                         <article className="app-panel rounded-xl p-6">
@@ -212,26 +559,44 @@ export default function Emprestimos() {
                                         className={`${classeCampo} mt-1.5`}
                                         value={nome}
                                         placeholder="Digite para localizar um cadastro"
-                                        onChange={(evento) => procurarLeitor(evento.target.value)}
+                                        autoComplete="off"
+                                        onChange={(evento) => void procurarLeitor(evento.target.value)}
                                     />
                                 </label>
+
+                                {leitorId && (
+                                    <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2.5 text-xs text-cyan-900">
+                                        <span>
+                                            <strong>Cadastro selecionado.</strong> Alterações em nome, tipo ou turma serão salvas com o empréstimo.
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={limparLeitor}
+                                            className="rounded-lg border border-cyan-300 bg-white px-2.5 py-1 font-semibold text-cyan-800 hover:bg-cyan-100"
+                                        >
+                                            Trocar leitor
+                                        </button>
+                                    </div>
+                                )}
+
                                 <label className="text-sm font-semibold text-slate-700">
                                     Tipo
                                     <select
                                         className={`${classeCampo} mt-1.5`}
                                         value={tipo}
-                                        onChange={(evento) => setTipo(evento.target.value as "ALUNO" | "PROFESSOR")}
+                                        onChange={(evento) => ajustarTipo(evento.target.value as "ALUNO" | "PROFESSOR")}
                                     >
                                         <option value="ALUNO">Aluno</option>
                                         <option value="PROFESSOR">Professor</option>
                                     </select>
                                 </label>
                                 <label className="text-sm font-semibold text-slate-700">
-                                    Turma / identificação
+                                    Turma / identificação {tipo === "ALUNO" && <span className="font-normal text-red-600">(obrigatória)</span>}
                                     <input
                                         className={`${classeCampo} mt-1.5`}
                                         value={serie}
-                                        placeholder="Ex.: 7º A"
+                                        required={tipo === "ALUNO"}
+                                        placeholder={tipo === "PROFESSOR" ? "Ex.: História" : "Ex.: 7º A"}
                                         onChange={(evento) => setSerie(evento.target.value)}
                                         onBlur={() => setSerie(normalizarSerie(serie))}
                                     />
@@ -278,19 +643,26 @@ export default function Emprestimos() {
                                         Cadastros encontrados
                                     </p>
                                     <div className="divide-y divide-cyan-100">
-                                        {sugestoes.map((leitor) => (
-                                            <button
-                                                type="button"
-                                                key={leitor.id}
-                                                onClick={() => selecionarLeitor(leitor)}
-                                                className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-cyan-50"
-                                            >
-                                                <span className="font-medium text-slate-800">{leitor.nome}</span>
-                                                <span className="text-xs text-slate-500">
-                                                    {leitor.tipo === "PROFESSOR" ? "Professor" : leitor.serie || "Aluno"}
-                                                </span>
-                                            </button>
-                                        ))}
+                                        {sugestoes.map((leitor) => {
+                                            const banido = diasRestantesBanimento(leitor) > 0;
+                                            return (
+                                                <button
+                                                    type="button"
+                                                    key={leitor.id}
+                                                    onClick={() => selecionarLeitor(leitor)}
+                                                    className="flex w-full cursor-pointer items-center justify-between gap-3 px-3 py-2.5 text-left transition hover:bg-cyan-50"
+                                                >
+                                                    <span className={`font-medium ${banido ? "text-red-700" : "text-slate-800"}`}>
+                                                        {leitor.nome}
+                                                    </span>
+                                                    <span className={`text-xs ${banido ? "font-semibold text-red-600" : "text-slate-500"}`}>
+                                                        {banido
+                                                            ? `Banido por mais ${diasRestantesBanimento(leitor)} dia(s)`
+                                                            : leitor.tipo === "PROFESSOR" ? "Professor" : leitor.serie || "Aluno"}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             )}
@@ -326,41 +698,32 @@ export default function Emprestimos() {
                             <div
                                 ref={listaLivrosRef}
                                 className="max-h-72 space-y-2 overflow-auto overscroll-contain p-1"
+                                style={{ overflowAnchor: "none" }}
                             >
                                 {visiveis.map((livro) => {
                                     const selecionado = selecionados.includes(livro.id);
+                                    const indisponivel = !selecionado && livro.disponiveis <= 0;
                                     return (
-                                        <label
+                                        <button
+                                            type="button"
+                                            role="checkbox"
+                                            aria-checked={selecionado}
+                                            disabled={indisponivel}
                                             key={livro.id}
-                                            className={`group flex cursor-pointer items-start gap-3 rounded-xl border p-3 transition-all ${
+                                            onClick={() => alternarLivro(livro)}
+                                            className={`group flex w-full items-start gap-3 rounded-xl border p-3 text-left transition-all ${
                                                 selecionado
-                                                    ? "app-selected-option border-cyan-300"
-                                                    : "border-[var(--app-border)] bg-[var(--app-surface-raised)] hover:border-cyan-400 hover:shadow-md hover:ring-1 hover:ring-cyan-400/30"
+                                                    ? "app-selected-option cursor-pointer border-cyan-300"
+                                                    : indisponivel
+                                                      ? "cursor-not-allowed border-[var(--app-border)] bg-[var(--app-surface-raised)] opacity-55"
+                                                      : "cursor-pointer border-[var(--app-border)] bg-[var(--app-surface-raised)] hover:border-cyan-400 hover:shadow-md hover:ring-1 hover:ring-cyan-400/30"
                                             }`}
                                         >
-                                            <input
-                                                type="checkbox"
-                                                className="peer sr-only"
-                                                checked={selecionado}
-                                                onChange={() => {
-                                                    setSelecionados((atuais) =>
-                                                        selecionado
-                                                            ? atuais.filter((id) => id !== livro.id)
-                                                            : [...atuais, livro.id],
-                                                    );
-                                                    setEstadosLivros((atuais) => {
-                                                        const novos = { ...atuais };
-                                                        if (selecionado) delete novos[livro.id];
-                                                        else novos[livro.id] = "";
-                                                        return novos;
-                                                    });
-                                                }}
-                                            />
                                             <span
                                                 aria-hidden="true"
-                                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition peer-focus-visible:ring-4 peer-focus-visible:ring-cyan-300/60 ${
+                                                className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border-2 transition group-focus-visible:ring-4 group-focus-visible:ring-cyan-300/60 ${
                                                     selecionado
-                                                        ? "border-white bg-[#ffffff] text-cyan-700 shadow-sm"
+                                                        ? "border-white bg-white text-cyan-700 shadow-sm"
                                                         : "border-slate-400 bg-[var(--app-surface)] text-transparent group-hover:border-cyan-500"
                                                 }`}
                                             >
@@ -377,47 +740,81 @@ export default function Emprestimos() {
                                             <span className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
                                                 selecionado
                                                     ? "bg-white/15 text-white ring-1 ring-white/25"
-                                                    : livro.disponiveis < 0
-                                                    ? "bg-orange-100 text-orange-800"
-                                                    : livro.disponiveis === 0
+                                                    : livro.disponiveis <= 0
                                                       ? "bg-slate-100 text-slate-600"
                                                       : "bg-emerald-100 text-emerald-700"
                                             }`}>
-                                                {livro.disponiveis} em estoque
+                                                {Math.max(0, livro.disponiveis)} em estoque
                                             </span>
-                                        </label>
+                                        </button>
                                     );
                                 })}
                                 {!carregando && visiveis.length === 0 && (
                                     <div className="rounded-xl border border-dashed border-sky-400 bg-sky-100/60 px-4 py-8 text-center text-sm text-slate-600">
-                                        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="mx-auto mb-2 h-8 w-8 text-cyan-700">
-                                            <path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H11a3 3 0 0 1 3 3v14a3 3 0 0 0-3-3H6.5A2.5 2.5 0 0 0 4 19.5v-14Z" strokeWidth="1.8" strokeLinejoin="round" />
-                                            <path d="M14 6a3 3 0 0 1 3-3h2a1 1 0 0 1 1 1v15.5a2.5 2.5 0 0 0-2.5-2.5H14" strokeWidth="1.8" strokeLinejoin="round" />
-                                        </svg>
                                         Nenhum livro encontrado para esta busca.
                                     </div>
                                 )}
                             </div>
 
                             {selecionados.length > 0 && (
-                                <div className="mt-5 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50/80 p-4">
+                                <div
+                                    className="mt-5 space-y-4 rounded-xl border border-indigo-200 bg-indigo-50/80 p-4"
+                                    style={{ overflowAnchor: "none" }}
+                                >
                                     <div>
-                                        <h3 className="font-semibold text-slate-900">Estado de conservação</h3>
-                                        <p className="text-xs text-slate-500">Informe como cada livro está no momento da retirada.</p>
+                                        <h3 className="font-semibold text-slate-900">Detalhes da retirada</h3>
+                                        <p className="text-xs text-slate-500">
+                                            {tipo === "PROFESSOR"
+                                                ? "Defina a quantidade e o estado de cada título."
+                                                : "Alunos retiram uma unidade de cada título. Informe o estado dos livros."}
+                                        </p>
                                     </div>
                                     {selecionados.map((livroId) => {
                                         const livroSelecionado = livros.find((livro) => livro.id === livroId);
                                         if (!livroSelecionado) return null;
                                         return (
-                                            <label key={livroId} className="block rounded-xl border border-indigo-200 bg-[var(--app-surface-raised)] p-3 text-sm shadow-sm">
-                                                <span className="font-semibold text-slate-800">{livroSelecionado.titulo}</span>
-                                                <input
-                                                    type="text"
-                                                    value={estadosLivros[livroId] || ""}
-                                                    onChange={(evento) => setEstadosLivros((atuais) => ({ ...atuais, [livroId]: evento.target.value }))}
-                                                    placeholder="Descreva o estado do livro"
-                                                    className={`${classeCampo} mt-2`}
-                                                />
+                                            <div key={livroId} className="rounded-xl border border-indigo-200 bg-[var(--app-surface-raised)] p-3 text-sm shadow-sm">
+                                                <div className="flex flex-wrap items-end justify-between gap-3">
+                                                    <div>
+                                                        <span className="font-semibold text-slate-800">{livroSelecionado.titulo}</span>
+                                                        <span className="mt-0.5 block text-xs text-slate-500">{livroSelecionado.disponiveis} unidade(s) disponível(is)</span>
+                                                    </div>
+                                                    {tipo === "PROFESSOR" ? (
+                                                        <label className="w-32 text-xs font-semibold text-slate-600">
+                                                            Quantidade
+                                                            <input
+                                                                type="number"
+                                                                min={1}
+                                                                max={livroSelecionado.disponiveis}
+                                                                step={1}
+                                                                value={quantidades[livroId] || 1}
+                                                                onChange={(evento) => {
+                                                                    const valor = Math.trunc(Number(evento.target.value));
+                                                                    setQuantidades((atuais) => ({
+                                                                        ...atuais,
+                                                                        [livroId]: Math.min(
+                                                                            livroSelecionado.disponiveis,
+                                                                            Math.max(1, Number.isFinite(valor) ? valor : 1),
+                                                                        ),
+                                                                    }));
+                                                                }}
+                                                                className={`${classeCampo} mt-1 py-2`}
+                                                            />
+                                                        </label>
+                                                    ) : (
+                                                        <span className="rounded-full bg-indigo-100 px-2.5 py-1 text-xs font-semibold text-indigo-700">1 unidade</span>
+                                                    )}
+                                                </div>
+                                                <label className="mt-3 block font-semibold text-slate-700">
+                                                    Estado de conservação
+                                                    <input
+                                                        type="text"
+                                                        value={estadosLivros[livroId] || ""}
+                                                        onChange={(evento) => setEstadosLivros((atuais) => ({ ...atuais, [livroId]: evento.target.value }))}
+                                                        placeholder="Descreva o estado do livro"
+                                                        className={`${classeCampo} mt-1.5`}
+                                                    />
+                                                </label>
                                                 <span className="mt-2 flex flex-wrap gap-1.5">
                                                     {["Novo", "Bom estado", "Marcas de uso", "Danificado"].map((estado) => (
                                                         <button
@@ -434,7 +831,7 @@ export default function Emprestimos() {
                                                         </button>
                                                     ))}
                                                 </span>
-                                            </label>
+                                            </div>
                                         );
                                     })}
                                 </div>
@@ -443,7 +840,7 @@ export default function Emprestimos() {
                             <button
                                 type="button"
                                 disabled={!podeRegistrar}
-                                onClick={salvar}
+                                onClick={() => void salvar()}
                                 className={`mt-5 flex w-full items-center justify-center gap-2 rounded-xl border px-5 py-3 font-semibold transition-all ${
                                     podeRegistrar
                                         ? "app-primary-action cursor-pointer border-cyan-500 text-white"
@@ -455,11 +852,6 @@ export default function Emprestimos() {
                                     <path d="M5 17a2.5 2.5 0 0 1 2.5-2.5H18M14.5 7.5v4m-2-2h4" strokeLinecap="round" strokeLinejoin="round" />
                                 </svg>
                                 {salvando ? "Registrando..." : "Registrar empréstimo"}
-                                {!salvando && (
-                                    <svg aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" className="h-4 w-4" strokeWidth="2">
-                                        <path d="M4 10h12m-4-4 4 4-4 4" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                )}
                             </button>
                         </article>
                     </section>
@@ -471,7 +863,7 @@ export default function Emprestimos() {
                                     <h2 className="text-2xl font-semibold text-slate-900">Empréstimos ativos</h2>
                                     <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-xs font-bold text-cyan-800">{lista.length}</span>
                                 </div>
-                                <p className="text-sm text-slate-500">Os empréstimos devolvidos ficam disponíveis somente nas exportações.</p>
+                                <p className="text-sm text-slate-500">Devoluções podem ser registradas por título e por quantidade.</p>
                             </div>
                             <label className="w-full sm:w-96">
                                 <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-slate-600">Pesquisar nos empréstimos</span>
@@ -500,6 +892,7 @@ export default function Emprestimos() {
                             <div className="space-y-3 bg-slate-200/70 p-4 sm:p-5">
                                 {emprestimosVisiveis.map((emprestimo) => {
                                     const status = obterStatus(emprestimo.status);
+                                    const restante = Math.max(0, emprestimo.quantidade - emprestimo.quantidadeDevolvida);
                                     return (
                                         <article key={emprestimo.id} className="grid gap-4 rounded-xl border border-sky-200 bg-sky-50 p-4 shadow-sm transition hover:border-cyan-500 hover:bg-cyan-50 hover:shadow-md md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
                                             <div className="min-w-0">
@@ -530,19 +923,24 @@ export default function Emprestimos() {
                                                         </span>
                                                     </div>
                                                 </div>
+                                                <div className="mt-3 flex flex-wrap gap-2 text-xs font-semibold">
+                                                    <span className="rounded-full bg-cyan-100 px-2.5 py-1 text-cyan-800">Retiradas: {emprestimo.quantidade}</span>
+                                                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">Devolvidas: {emprestimo.quantidadeDevolvida}</span>
+                                                    <span className="rounded-full bg-amber-100 px-2.5 py-1 text-amber-800">Restantes: {restante}</span>
+                                                </div>
                                                 {emprestimo.estadoLivro && (
                                                     <p className="mt-3 text-xs text-slate-500">
                                                         <span className="font-semibold text-slate-600">Estado na retirada:</span> {emprestimo.estadoLivro}
                                                     </p>
                                                 )}
                                             </div>
-                                            {emprestimo.status !== "DEVOLVIDO" && (
+                                            {restante > 0 && (
                                                 <button
                                                     type="button"
                                                     className="w-full cursor-pointer rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 md:w-auto"
-                                                    onClick={() => devolver(emprestimo)}
+                                                    onClick={() => abrirDevolucao(emprestimo)}
                                                 >
-                                                    Confirmar devolução
+                                                    Registrar devolução
                                                 </button>
                                             )}
                                         </article>
@@ -561,6 +959,247 @@ export default function Emprestimos() {
                     </section>
                 </div>
             </main>
+
+            {avisoRegistro && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+                    <section role="dialog" aria-modal="true" aria-labelledby="titulo-aviso-emprestimo" className="app-panel w-full max-w-md rounded-2xl p-6 shadow-2xl">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-700">Confirmação necessária</p>
+                        <h2 id="titulo-aviso-emprestimo" className="mt-1 text-xl font-semibold text-slate-900">Confirmar empréstimo</h2>
+                        <p className="mt-3 leading-relaxed text-slate-600">{avisoRegistro.mensagem}</p>
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button type="button" onClick={() => setAvisoRegistro(null)} className="rounded-xl bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-300">
+                                Não, voltar
+                            </button>
+                            <button type="button" onClick={confirmarAvisoRegistro} className="app-primary-action rounded-xl px-4 py-2.5 text-sm font-semibold text-white">
+                                Sim, prosseguir
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
+
+            {banimentoPendente && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+                    <section role="dialog" aria-modal="true" aria-labelledby="titulo-banimento-emprestimo" className="app-panel w-full max-w-md rounded-2xl p-6 shadow-2xl">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-red-700">Leitor impedido</p>
+                        <h2 id="titulo-banimento-emprestimo" className="mt-1 text-xl font-semibold text-slate-900">Banimento ativo</h2>
+                        <p className="mt-3 leading-relaxed text-slate-600">
+                            Esse aluno está banido por mais {banimentoPendente.diasRestantes} dia(s), deseja remover o banimento?
+                        </p>
+                        {banimentoPendente.leitor.motivoBanimento && (
+                            <p className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-800">
+                                <strong>Motivo:</strong> {banimentoPendente.leitor.motivoBanimento}
+                            </p>
+                        )}
+                        {erroTela && (
+                            <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">
+                                {erroTela}
+                            </p>
+                        )}
+                        <div className="mt-6 flex justify-end gap-2">
+                            <button type="button" disabled={removendoBanimento} onClick={() => setBanimentoPendente(null)} className="rounded-xl bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-300">
+                                Manter banimento
+                            </button>
+                            <button type="button" disabled={removendoBanimento} onClick={() => void removerBanimento()} className="rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60">
+                                {removendoBanimento ? "Removendo..." : "Sim, remover banimento"}
+                            </button>
+                        </div>
+                    </section>
+                </div>
+            )}
+
+            {devolucaoPendente && (
+                <div className="fixed inset-0 z-[110] flex items-center justify-center bg-slate-950/50 p-4" role="presentation">
+                    <section role="dialog" aria-modal="true" aria-labelledby="titulo-devolucao" className="app-panel w-full max-w-lg rounded-2xl p-6 shadow-2xl">
+                        <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">Devolução</p>
+                        <h2 id="titulo-devolucao" className="mt-1 text-xl font-semibold text-slate-900">
+                            {devolucaoPendente.emprestimo.livro.titulo}
+                        </h2>
+                        <p className="mt-1 text-sm text-slate-500">Leitor: {devolucaoPendente.emprestimo.aluno.nome}</p>
+                        {erroTela && (
+                            <p role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 p-3 text-sm font-medium text-red-800">
+                                {erroTela}
+                            </p>
+                        )}
+
+                        {devolucaoPendente.etapa === "quantidade" && (
+                            <div className="mt-5">
+                                <label className="block text-sm font-semibold text-slate-700">
+                                    Quantidade devolvida agora
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={devolucaoPendente.emprestimo.quantidade - devolucaoPendente.emprestimo.quantidadeDevolvida}
+                                        step={1}
+                                        value={devolucaoPendente.quantidade}
+                                        onChange={(evento) => {
+                                            setErroTela("");
+                                            setDevolucaoPendente((atual) => atual ? {
+                                                ...atual,
+                                                quantidade: Math.trunc(Number(evento.target.value)),
+                                            } : atual);
+                                        }}
+                                        className={`${classeCampo} mt-1.5`}
+                                    />
+                                </label>
+                                <p className="mt-2 text-xs text-slate-500">
+                                    Restam {devolucaoPendente.emprestimo.quantidade - devolucaoPendente.emprestimo.quantidadeDevolvida} unidade(s) deste título.
+                                </p>
+                                <div className="mt-6 flex justify-end gap-2">
+                                    <button type="button" onClick={() => setDevolucaoPendente(null)} className="rounded-xl bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-300">Cancelar</button>
+                                    <button type="button" disabled={salvandoDevolucao} onClick={avancarDevolucao} className="app-primary-action rounded-xl px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-60">
+                                        {devolucaoPendente.emprestimo.aluno.tipo === "ALUNO" && emprestimoAtrasado(devolucaoPendente.emprestimo)
+                                            ? "Continuar"
+                                            : salvandoDevolucao ? "Salvando..." : "Confirmar devolução"}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {devolucaoPendente.etapa === "perguntaPunicao" && (
+                            <div className="mt-5">
+                                <div className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm leading-relaxed text-amber-900">
+                                    Este livro está atrasado. Deseja aplicar uma punição ao aluno?
+                                </div>
+                                <div className="mt-6 flex flex-wrap justify-end gap-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDevolucaoPendente((atual) => atual ? { ...atual, etapa: "quantidade" } : atual)}
+                                        className="rounded-xl bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                                    >
+                                        Voltar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={salvandoDevolucao}
+                                        onClick={() => void concluirDevolucao(false)}
+                                        className="rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-800 hover:bg-emerald-100 disabled:opacity-60"
+                                    >
+                                        {salvandoDevolucao ? "Salvando..." : "Não aplicar"}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setDevolucaoPendente((atual) => atual ? { ...atual, etapa: "dadosPunicao" } : atual)}
+                                        className="rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800"
+                                    >
+                                        Sim, aplicar punição
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+
+                        {devolucaoPendente.etapa === "dadosPunicao" && (
+                            <div className="mt-5 space-y-4">
+                                <label className="block text-sm font-semibold text-slate-700">
+                                    Dias sem poder realizar empréstimos
+                                    <input
+                                        type="number"
+                                        min={1}
+                                        max={3650}
+                                        step={1}
+                                        value={devolucaoPendente.diasPunicao}
+                                        onChange={(evento) => {
+                                            setErroTela("");
+                                            setDevolucaoPendente((atual) => atual ? {
+                                                ...atual,
+                                                diasPunicao: Math.trunc(Number(evento.target.value)),
+                                            } : atual);
+                                        }}
+                                        className={`${classeCampo} mt-1.5`}
+                                    />
+                                </label>
+                                <label className="block text-sm font-semibold text-slate-700">
+                                    Motivo da punição
+                                    <textarea
+                                        rows={3}
+                                        value={devolucaoPendente.motivoPunicao}
+                                        onChange={(evento) => {
+                                            setErroTela("");
+                                            setDevolucaoPendente((atual) => atual ? {
+                                                ...atual,
+                                                motivoPunicao: evento.target.value,
+                                            } : atual);
+                                        }}
+                                        className={`${classeCampo} mt-1.5 resize-none`}
+                                    />
+                                </label>
+                                <div className="flex justify-end gap-2 pt-2">
+                                    <button
+                                        type="button"
+                                        disabled={salvandoDevolucao}
+                                        onClick={() => setDevolucaoPendente((atual) => atual ? { ...atual, etapa: "perguntaPunicao" } : atual)}
+                                        className="rounded-xl bg-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 hover:bg-slate-300"
+                                    >
+                                        Voltar
+                                    </button>
+                                    <button
+                                        type="button"
+                                        disabled={salvandoDevolucao}
+                                        onClick={() => void concluirDevolucao(true)}
+                                        className="rounded-xl bg-red-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-800 disabled:opacity-60"
+                                    >
+                                        {salvandoDevolucao ? "Salvando..." : "Aplicar e concluir"}
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </section>
+                </div>
+            )}
+
+            {termoDisponivel && (
+                <section
+                    role="dialog"
+                    aria-modal="false"
+                    aria-live="polite"
+                    aria-labelledby="titulo-termo-disponivel"
+                    className="app-panel fixed bottom-6 right-6 z-[100] w-[min(30rem,calc(100vw-3rem))] rounded-2xl border-2 border-emerald-300 p-5 shadow-2xl"
+                >
+                    <div className="flex items-start gap-3">
+                        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-emerald-100 text-emerald-700" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6" strokeWidth="2.2">
+                                <path d="m5 12 4 4L19 6" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <p className="text-xs font-bold uppercase tracking-[0.12em] text-emerald-700">Empréstimo registrado</p>
+                            <h2 id="titulo-termo-disponivel" className="mt-1 text-xl font-semibold text-slate-900">
+                                Termo de responsabilidade pronto
+                            </h2>
+                            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                                O termo de {termoDisponivel.nomeAluno} foi gerado. Abra a visualização para conferir e imprimir as duas vias.
+                            </p>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setTermoDisponivel(null)}
+                            aria-label="Fechar aviso do termo"
+                            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xl text-slate-500 hover:bg-slate-100 hover:text-slate-800"
+                        >
+                            &times;
+                        </button>
+                    </div>
+                    <div className="mt-5 flex justify-end gap-2 border-t border-emerald-200 pt-4">
+                        <button
+                            type="button"
+                            onClick={() => setTermoDisponivel(null)}
+                            className="rounded-xl bg-gray-200 px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:bg-gray-300"
+                        >
+                            Agora não
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const termo = termoDisponivel;
+                                navigate("/termo-impressao", { state: { termo } });
+                            }}
+                            className="app-primary-action rounded-xl px-4 py-2.5 text-sm font-semibold text-white"
+                        >
+                            Abrir termo para impressão
+                        </button>
+                    </div>
+                </section>
+            )}
         </div>
     );
 }
