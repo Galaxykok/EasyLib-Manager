@@ -6,6 +6,7 @@ import Alunos from "./alunos.tsx";
 import Exportacao from "./exportacao.tsx";
 import Debug from "./debug.tsx";
 import Configuracoes from "./configuracoes.tsx";
+import Sobre from "./sobre.tsx";
 import TermoResponsabilidade from "./termoResponsabilidade.tsx";
 import { StatusEmprestimo } from "./enum.ts";
 import { StatusLivro } from "./enum.ts";
@@ -31,6 +32,13 @@ declare global {
             obterAlunos: () => Promise<{
                 success: boolean;
                 data?: Aluno[];
+                error?: string;
+            }>;
+            obterHistoricoLeitor: (alunoId: number) => Promise<RespostaIPC<HistoricoEmprestimosLeitor>>;
+            exportarHistoricoLeitor: (alunoId: number) => Promise<{
+                success: boolean;
+                cancelado?: boolean;
+                caminho?: string;
                 error?: string;
             }>;
             obterEmprestimo: () => Promise<{
@@ -95,6 +103,30 @@ declare global {
         nome: string;
         serie: string;
         tipo: "ALUNO" | "PROFESSOR";
+    }
+    interface HistoricoEmprestimoLeitorItem {
+        id: number;
+        livroTitulo: string;
+        livroAutor: string;
+        isbn?: string | null;
+        dataHoraEmprestimo: Date | string;
+        dataDevolucaoPrevista: Date | string | null;
+        devolvidoEm?: Date | string | null;
+        status: StatusEmprestimo;
+        quantidade: number;
+        quantidadeDevolvida: number;
+        quantidadePendente: number;
+        estadoLivro: string;
+    }
+    interface HistoricoEmprestimosLeitor {
+        leitor: {
+            id: number;
+            nome: string;
+            serie: string;
+            tipo: "ALUNO" | "PROFESSOR";
+            ativo: boolean;
+        };
+        itens: HistoricoEmprestimoLeitorItem[];
     }
     interface Livro {
         id: number;
@@ -163,6 +195,7 @@ declare global {
     }
     interface Configuracao {
         termoResponsabilidadeAtivo: boolean;
+        permitirEmprestimosNegativos: boolean;
         responsavelBiblioteca: string;
         modeloTermo: string;
         paresTermosPorFolha: number;
@@ -215,6 +248,7 @@ export default function App() {
             <Route path="/exportacao" element={<Exportacao />} />
             <Route path="/debug" element={<Debug />} />
             <Route path="/configuracoes" element={<Configuracoes />} />
+            <Route path="/sobre" element={<Sobre />} />
             <Route path="/termo-impressao" element={<TermoResponsabilidade />} />
         </Routes>
     );

@@ -191,7 +191,7 @@ export default function Home() {
                                             <div className="min-w-0 flex-1">
                                                 <strong className="block truncate">{emprestimo.livro.titulo}</strong>
                                                 <span className="text-sm text-slate-500">
-                                                    {emprestimo.aluno.nome} · {emprestimo.aluno.serie || "Sem turma"}
+                                                    {emprestimo.aluno.nome} · {emprestimo.aluno.tipo === "PROFESSOR" ? "Professor" : emprestimo.aluno.serie || "Sem turma"}
                                                     {quantidadeRestante !== null
                                                         ? ` · ${quantidadeRestante} ${quantidadeRestante === 1 ? "unidade pendente" : "unidades pendentes"}`
                                                         : ""}

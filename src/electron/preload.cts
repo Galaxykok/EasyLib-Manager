@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     atualizarLivro: (dados: LivroAtualizacao) => ipcRenderer.invoke("atualizar-livro", dados),
     cadastrarEmprestimo: (dados:any) => ipcRenderer.invoke("cadastrar-emprestimo", dados),
     obterAlunos: () => ipcRenderer.invoke("obter-alunos"),
+    obterHistoricoLeitor: (alunoId: number) => ipcRenderer.invoke("obter-historico-leitor", alunoId),
+    exportarHistoricoLeitor: (alunoId: number) => ipcRenderer.invoke("exportar-historico-leitor", alunoId),
     obterLivros: () => ipcRenderer.invoke("obter-livros"),
     obterEmprestimo: () => ipcRenderer.invoke("obter-emprestimo"),
     pesquisarAluno: (dado: any) => ipcRenderer.invoke("pesquisar-aluno", dado),

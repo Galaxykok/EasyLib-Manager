@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import Sidebar from "./sidebar.tsx";
 import { chaveSerie, normalizarSerie } from "../shared/normalizacao.ts";
 
+const LIMITE_QUANTIDADE_EMPRESTIMO = 2_147_483_647;
+
 const formatarData = (valor: Date | string | null | undefined) =>
     valor ? new Date(valor).toLocaleDateString("pt-BR") : "Sem prazo";
 
@@ -96,6 +98,7 @@ export default function Emprestimos() {
     const [prazo, setPrazo] = useState("");
     const [busca, setBusca] = useState("");
     const [buscaEmprestimos, setBuscaEmprestimos] = useState("");
+    const [permitirEmprestimosNegativos, setPermitirEmprestimosNegativos] = useState(false);
     const [carregando, setCarregando] = useState(true);
     const [salvando, setSalvando] = useState(false);
     const [salvandoDevolucao, setSalvandoDevolucao] = useState(false);
@@ -115,15 +118,21 @@ export default function Emprestimos() {
         setCarregando(true);
         setErroTela("");
         try {
-            const [emprestimos, acervo] = await Promise.all([
+            const [emprestimos, acervo, configuracao] = await Promise.all([
                 window.electronAPI.obterEmprestimo(),
                 window.electronAPI.obterLivros(),
+                window.electronAPI.obterConfiguracao(),
             ]);
             const erros: string[] = [];
             if (emprestimos.success && emprestimos.data) setLista(emprestimos.data);
             else if (!emprestimos.success) erros.push(`Erro ao carregar empréstimos: ${emprestimos.error}`);
             if (acervo.success && acervo.data) setLivros(acervo.data);
             else if (!acervo.success) erros.push(`Erro ao carregar o acervo: ${acervo.error}`);
+            if (configuracao.success && configuracao.data) {
+                setPermitirEmprestimosNegativos(Boolean(configuracao.data.permitirEmprestimosNegativos));
+            } else if (!configuracao.success) {
+                erros.push(`Erro ao carregar as configurações: ${configuracao.error}`);
+            }
             if (erros.length > 0) setErroTela(erros.join(" "));
         } catch (erro) {
             setErroTela(
@@ -159,7 +168,9 @@ export default function Emprestimos() {
 
     const ajustarTipo = (novoTipo: "ALUNO" | "PROFESSOR") => {
         setTipo(novoTipo);
-        if (novoTipo === "ALUNO") {
+        if (novoTipo === "PROFESSOR") {
+            setSerie("");
+        } else {
             setQuantidades((atuais) => Object.fromEntries(
                 Object.keys(atuais).map((id) => [Number(id), 1]),
             ));
@@ -169,8 +180,8 @@ export default function Emprestimos() {
     const preencherLeitor = (leitor: Aluno) => {
         setLeitorId(leitor.id);
         setNome(leitor.nome);
-        setSerie(leitor.serie);
         ajustarTipo(leitor.tipo);
+        setSerie(leitor.tipo === "ALUNO" ? leitor.serie : "");
         setSugestoes([]);
     };
 
@@ -250,7 +261,7 @@ export default function Emprestimos() {
 
     const alternarLivro = (livro: Livro) => {
         const selecionado = selecionados.includes(livro.id);
-        if (!selecionado && livro.disponiveis <= 0) return;
+        if (!selecionado && livro.disponiveis <= 0 && !permitirEmprestimosNegativos) return;
         posicaoScrollRef.current = mainRef.current?.scrollTop ?? null;
         setSelecionados((atuais) =>
             selecionado ? atuais.filter((id) => id !== livro.id) : [...atuais, livro.id],
@@ -277,7 +288,12 @@ export default function Emprestimos() {
         setSalvando(true);
         try {
             const resposta = await window.electronAPI.cadastrarEmprestimo({
-                leitor: { id: leitorId, nome: nome.trim(), serie: normalizarSerie(serie), tipo },
+                leitor: {
+                    id: leitorId,
+                    nome: nome.trim(),
+                    serie: tipo === "ALUNO" ? normalizarSerie(serie) : "",
+                    tipo,
+                },
                 itens: selecionados.map((livroId) => ({
                     livroId,
                     quantidade: tipo === "ALUNO" ? 1 : quantidades[livroId] || 1,
@@ -305,7 +321,7 @@ export default function Emprestimos() {
                         leitor: {
                             id: resposta.alunoId,
                             nome: nome.trim(),
-                            serie: normalizarSerie(serie),
+                            serie: tipo === "ALUNO" ? normalizarSerie(serie) : "",
                             tipo,
                             ativo: true,
                             banidoAte: null,
@@ -465,10 +481,12 @@ export default function Emprestimos() {
     );
     const termoBuscaEmprestimos = buscaEmprestimos.trim();
     const emprestimosVisiveis = lista.filter((emprestimo) => {
-        const correspondeAosDados = `${emprestimo.aluno.nome} ${emprestimo.aluno.serie} ${emprestimo.livro.titulo} ${emprestimo.livro.isbn || ""}`
+        const serieLeitor = emprestimo.aluno.tipo === "ALUNO" ? emprestimo.aluno.serie : "";
+        const correspondeAosDados = `${emprestimo.aluno.nome} ${serieLeitor} ${emprestimo.livro.titulo} ${emprestimo.livro.isbn || ""}`
             .toLocaleLowerCase("pt-BR")
             .includes(termoBuscaEmprestimos.toLocaleLowerCase("pt-BR"));
-        const correspondeATurma = chaveSerie(emprestimo.aluno.serie).includes(chaveSerie(termoBuscaEmprestimos));
+        const correspondeATurma = emprestimo.aluno.tipo === "ALUNO"
+            && chaveSerie(emprestimo.aluno.serie).includes(chaveSerie(termoBuscaEmprestimos));
         return correspondeAosDados || correspondeATurma;
     });
     const podeRegistrar = Boolean(
@@ -482,7 +500,8 @@ export default function Emprestimos() {
                 || !livro
                 || !Number.isSafeInteger(quantidade)
                 || quantidade < 1
-                || quantidade > livro.disponiveis;
+                || quantidade > LIMITE_QUANTIDADE_EMPRESTIMO
+                || (!permitirEmprestimosNegativos && quantidade > livro.disponiveis);
         })
         && !salvando,
     );
@@ -554,7 +573,7 @@ export default function Emprestimos() {
 
                             <div className="grid grid-cols-2 gap-4">
                                 <label className="col-span-2 text-sm font-semibold text-slate-700">
-                                    Nome do leitor
+                                    Nome completo
                                     <input
                                         className={`${classeCampo} mt-1.5`}
                                         value={nome}
@@ -567,7 +586,7 @@ export default function Emprestimos() {
                                 {leitorId && (
                                     <div className="col-span-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-200 bg-cyan-50 px-3 py-2.5 text-xs text-cyan-900">
                                         <span>
-                                            <strong>Cadastro selecionado.</strong> Alterações em nome, tipo ou turma serão salvas com o empréstimo.
+                                            <strong>Cadastro selecionado.</strong> Alterações no nome{tipo === "ALUNO" ? " ou na turma" : ""} serão salvas com o empréstimo.
                                         </span>
                                         <button
                                             type="button"
@@ -579,28 +598,31 @@ export default function Emprestimos() {
                                     </div>
                                 )}
 
-                                <label className="text-sm font-semibold text-slate-700">
+                                <label className={`${tipo === "PROFESSOR" ? "col-span-2" : ""} text-sm font-semibold text-slate-700`}>
                                     Tipo
                                     <select
-                                        className={`${classeCampo} mt-1.5`}
+                                        className={`${classeCampo} mt-1.5 disabled:cursor-not-allowed disabled:border-slate-300 disabled:bg-slate-100 disabled:text-slate-600`}
                                         value={tipo}
+                                        disabled={Boolean(leitorId)}
                                         onChange={(evento) => ajustarTipo(evento.target.value as "ALUNO" | "PROFESSOR")}
                                     >
                                         <option value="ALUNO">Aluno</option>
                                         <option value="PROFESSOR">Professor</option>
                                     </select>
                                 </label>
-                                <label className="text-sm font-semibold text-slate-700">
-                                    Turma / identificação {tipo === "ALUNO" && <span className="font-normal text-red-600">(obrigatória)</span>}
-                                    <input
-                                        className={`${classeCampo} mt-1.5`}
-                                        value={serie}
-                                        required={tipo === "ALUNO"}
-                                        placeholder={tipo === "PROFESSOR" ? "Ex.: História" : "Ex.: 7º A"}
-                                        onChange={(evento) => setSerie(evento.target.value)}
-                                        onBlur={() => setSerie(normalizarSerie(serie))}
-                                    />
-                                </label>
+                                {tipo === "ALUNO" && (
+                                    <label className="text-sm font-semibold text-slate-700">
+                                        Série / turma <span className="font-normal text-red-600">(obrigatória)</span>
+                                        <input
+                                            className={`${classeCampo} mt-1.5`}
+                                            value={serie}
+                                            required
+                                            placeholder="Ex.: 7º A"
+                                            onChange={(evento) => setSerie(evento.target.value)}
+                                            onBlur={() => setSerie(normalizarSerie(serie))}
+                                        />
+                                    </label>
+                                )}
                                 <label className="col-span-2 text-sm font-semibold text-slate-700">
                                     Data prevista <span className="font-normal text-slate-400">(opcional)</span>
                                     <input
@@ -702,7 +724,9 @@ export default function Emprestimos() {
                             >
                                 {visiveis.map((livro) => {
                                     const selecionado = selecionados.includes(livro.id);
-                                    const indisponivel = !selecionado && livro.disponiveis <= 0;
+                                    const indisponivel = !selecionado
+                                        && livro.disponiveis <= 0
+                                        && !permitirEmprestimosNegativos;
                                     return (
                                         <button
                                             type="button"
@@ -744,7 +768,7 @@ export default function Emprestimos() {
                                                       ? "bg-slate-100 text-slate-600"
                                                       : "bg-emerald-100 text-emerald-700"
                                             }`}>
-                                                {Math.max(0, livro.disponiveis)} em estoque
+                                                {livro.disponiveis} em estoque
                                             </span>
                                         </button>
                                     );
@@ -768,6 +792,11 @@ export default function Emprestimos() {
                                                 ? "Defina a quantidade e o estado de cada título."
                                                 : "Alunos retiram uma unidade de cada título. Informe o estado dos livros."}
                                         </p>
+                                        {permitirEmprestimosNegativos && (
+                                            <p className="mt-1 text-xs font-semibold text-amber-700">
+                                                Empréstimos com estoque zerado ou negativo estão permitidos nas configurações.
+                                            </p>
+                                        )}
                                     </div>
                                     {selecionados.map((livroId) => {
                                         const livroSelecionado = livros.find((livro) => livro.id === livroId);
@@ -785,17 +814,22 @@ export default function Emprestimos() {
                                                             <input
                                                                 type="number"
                                                                 min={1}
-                                                                max={livroSelecionado.disponiveis}
+                                                                max={permitirEmprestimosNegativos ? LIMITE_QUANTIDADE_EMPRESTIMO : livroSelecionado.disponiveis}
                                                                 step={1}
                                                                 value={quantidades[livroId] || 1}
                                                                 onChange={(evento) => {
                                                                     const valor = Math.trunc(Number(evento.target.value));
                                                                     setQuantidades((atuais) => ({
                                                                         ...atuais,
-                                                                        [livroId]: Math.min(
-                                                                            livroSelecionado.disponiveis,
-                                                                            Math.max(1, Number.isFinite(valor) ? valor : 1),
-                                                                        ),
+                                                                        [livroId]: permitirEmprestimosNegativos
+                                                                            ? Math.min(
+                                                                                LIMITE_QUANTIDADE_EMPRESTIMO,
+                                                                                Math.max(1, Number.isFinite(valor) ? valor : 1),
+                                                                            )
+                                                                            : Math.min(
+                                                                                livroSelecionado.disponiveis,
+                                                                                Math.max(1, Number.isFinite(valor) ? valor : 1),
+                                                                            ),
                                                                     }));
                                                                 }}
                                                                 className={`${classeCampo} mt-1 py-2`}

@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "path";
 import { StatusEmprestimo, StatusLivro, TipoLeitor, TipoMovimentacao } from "@prisma/client";
+import * as XLSX from "xlsx";
 import { chaveSerie, normalizarSerie } from "../shared/normalizacao.ts";
 
 type LivroEntrada = { titulo: string; autor?: string | null; numeroEdicao?: number | null; isbn?: string | null; editora?: string | null; unidade?: number };
@@ -26,9 +27,10 @@ type DevolucaoEntrada = {
   punicao?: { dias: number; motivo?: string } | null;
 };
 type LogDebug = { id: number; dataHora: string; origem: string; mensagem: string; detalhes?: string };
-type ConfiguracaoEntrada = { termoResponsabilidadeAtivo: boolean; responsavelBiblioteca: string; modeloTermo: string; paresTermosPorFolha?: number; tipoFolha?: string; painelDebugAtivo?: boolean; modoEscuro?: boolean };
+type ConfiguracaoEntrada = { termoResponsabilidadeAtivo: boolean; responsavelBiblioteca: string; modeloTermo: string; paresTermosPorFolha?: number; tipoFolha?: string; painelDebugAtivo?: boolean; modoEscuro?: boolean; permitirEmprestimosNegativos?: boolean };
 
 const LIMITE_INTEIRO_BANCO = 2_147_483_647;
+const LIMITE_INTEIRO_NEGATIVO_BANCO = -2_147_483_648;
 const DIA_EM_MS = 86_400_000;
 const FORMATO_BACKUP = "easylib-manager-backup";
 const VERSAO_BACKUP = 1;
@@ -74,6 +76,7 @@ const CONFIGURACAO_PADRAO = {
   tipoFolha: "A4",
   painelDebugAtivo: true,
   modoEscuro: false,
+  permitirEmprestimosNegativos: false,
 };
 
 type ColunaSqlite = { name: string };
@@ -122,7 +125,8 @@ const garantirTabelasBase = async () => {
     "paresTermosPorFolha" INTEGER NOT NULL DEFAULT 2,
     "tipoFolha" TEXT NOT NULL DEFAULT 'A4',
     "painelDebugAtivo" BOOLEAN NOT NULL DEFAULT 1,
-    "modoEscuro" BOOLEAN NOT NULL DEFAULT 0
+    "modoEscuro" BOOLEAN NOT NULL DEFAULT 0,
+    "permitirEmprestimosNegativos" BOOLEAN NOT NULL DEFAULT 0
   )`);
   await prisma.$executeRawUnsafe(`CREATE TABLE IF NOT EXISTS "movimentacoes" (
     "id" INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
@@ -144,13 +148,16 @@ const garantirEstruturaBanco = async () => {
   const nomesAlunos = new Set(colunasAlunos.map((coluna) => coluna.name));
   const colunasEmprestimos = await prisma.$queryRawUnsafe<ColunaSqlite[]>('PRAGMA table_info("emprestimos")');
   const nomesEmprestimos = new Set(colunasEmprestimos.map((coluna) => coluna.name));
+  const colunasConfiguracoes = await prisma.$queryRawUnsafe<ColunaSqlite[]>('PRAGMA table_info("configuracoes")');
+  const nomesConfiguracoes = new Set(colunasConfiguracoes.map((coluna) => coluna.name));
   const precisaMigrar = !nomesAlunos.has("ativo")
     || !nomesAlunos.has("banidoAte")
     || !nomesAlunos.has("motivoBanimento")
     || !nomesEmprestimos.has("grupoId")
     || !nomesEmprestimos.has("quantidade")
     || !nomesEmprestimos.has("quantidadeDevolvida")
-    || !nomesEmprestimos.has("devolvidoEm");
+    || !nomesEmprestimos.has("devolvidoEm")
+    || !nomesConfiguracoes.has("permitirEmprestimosNegativos");
   if (precisaMigrar) {
     const integridade = await prisma.$queryRawUnsafe<Array<{ integrity_check: string }>>("PRAGMA integrity_check");
     if (integridade.some((item) => item.integrity_check !== "ok")) {
@@ -185,25 +192,37 @@ const garantirEstruturaBanco = async () => {
   if (!nomesEmprestimos.has("devolvidoEm")) {
     await prisma.$executeRawUnsafe('ALTER TABLE "emprestimos" ADD COLUMN "devolvidoEm" DATETIME');
   }
+  if (!nomesConfiguracoes.has("permitirEmprestimosNegativos")) {
+    await prisma.$executeRawUnsafe('ALTER TABLE "configuracoes" ADD COLUMN "permitirEmprestimosNegativos" BOOLEAN NOT NULL DEFAULT 0');
+  }
 
   await prisma.$executeRawUnsafe('UPDATE "emprestimos" SET "grupoId" = \'legado-\' || "id" WHERE "grupoId" = \'\'');
   await prisma.$executeRawUnsafe('UPDATE "emprestimos" SET "quantidadeDevolvida" = "quantidade" WHERE "status" = \'DEVOLVIDO\' AND "quantidadeDevolvida" <> "quantidade"');
   await prisma.$executeRawUnsafe(`UPDATE "livros"
-    SET "unidade" = MAX("unidade", COALESCE((
+    SET "disponiveis" = "unidade" - COALESCE((
       SELECT SUM(MAX(0, "emprestimos"."quantidade" - "emprestimos"."quantidadeDevolvida"))
       FROM "emprestimos" WHERE "emprestimos"."id_livro" = "livros"."id"
-    ), 0))`);
-  await prisma.$executeRawUnsafe(`UPDATE "livros"
-    SET "disponiveis" = MAX(0, "unidade" - COALESCE((
-      SELECT SUM(MAX(0, "emprestimos"."quantidade" - "emprestimos"."quantidadeDevolvida"))
-      FROM "emprestimos" WHERE "emprestimos"."id_livro" = "livros"."id"
-    ), 0)),
+    ), 0),
     "status" = CASE WHEN "unidade" - COALESCE((
       SELECT SUM(MAX(0, "emprestimos"."quantidade" - "emprestimos"."quantidadeDevolvida"))
       FROM "emprestimos" WHERE "emprestimos"."id_livro" = "livros"."id"
     ), 0) > 0 THEN 'LIVRE' ELSE 'EMPRESTADO' END`);
   await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "alunos_ativo_nome_idx" ON "alunos"("ativo", "nome")');
   await prisma.$executeRawUnsafe('CREATE INDEX IF NOT EXISTS "emprestimos_grupoId_idx" ON "emprestimos"("grupoId")');
+  await prisma.$transaction(async (tx) => {
+    const professoresNormalizados = await tx.aluno.updateMany({
+      where: { tipo: TipoLeitor.PROFESSOR, serie: { not: "" } },
+      data: { serie: "" },
+    });
+    if (professoresNormalizados.count > 0) {
+      await tx.movimentacao.create({
+        data: {
+          tipo: TipoMovimentacao.ALUNO_ATUALIZADO,
+          descricao: `${professoresNormalizados.count} cadastro(s) de professor foram normalizados para manter somente o nome completo.`,
+        },
+      });
+    }
+  });
   if (precisaMigrar) {
     await prisma.movimentacao.create({
       data: {
@@ -478,6 +497,7 @@ ipcMain.handle("salvar-configuracao", async (_event, dados: ConfiguracaoEntrada)
         tipoFolha,
         painelDebugAtivo: Boolean(dados.painelDebugAtivo),
         modoEscuro: Boolean(dados.modoEscuro),
+        permitirEmprestimosNegativos: Boolean(dados.permitirEmprestimosNegativos),
     };
     const data = await prisma.$transaction(async (tx) => {
       const configuracao = await tx.configuracao.upsert({
@@ -487,7 +507,7 @@ ipcMain.handle("salvar-configuracao", async (_event, dados: ConfiguracaoEntrada)
       });
       await tx.movimentacao.create({ data: {
         tipo: TipoMovimentacao.CONFIGURACAO_ATUALIZADA,
-        descricao: `Configurações atualizadas: termo ${configuracao.termoResponsabilidadeAtivo ? "ativo" : "inativo"}, tema ${configuracao.modoEscuro ? "escuro" : "claro"}.`,
+        descricao: `Configurações atualizadas: termo ${configuracao.termoResponsabilidadeAtivo ? "ativo" : "inativo"}, tema ${configuracao.modoEscuro ? "escuro" : "claro"}, empréstimos negativos ${configuracao.permitirEmprestimosNegativos ? "permitidos" : "bloqueados"}.`,
       } });
       return configuracao;
     });
@@ -571,11 +591,14 @@ ipcMain.handle("limpar-dados", async (_event, tipo: "movimentacoes" | "emprestim
   }
 });
 
-const prepararLeitor = (leitor: LeitorEntrada) => ({
-  nome: String(leitor?.nome || "").trim(),
-  serie: normalizarSerie(leitor?.serie),
-  tipo: leitor?.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO,
-});
+const prepararLeitor = (leitor: LeitorEntrada) => {
+  const tipo = leitor?.tipo === "PROFESSOR" ? TipoLeitor.PROFESSOR : TipoLeitor.ALUNO;
+  return {
+    nome: String(leitor?.nome || "").trim(),
+    serie: tipo === TipoLeitor.PROFESSOR ? "" : normalizarSerie(leitor?.serie),
+    tipo,
+  };
+};
 
 const validarId = (id: unknown) => Number.isSafeInteger(id)
   && Number(id) > 0
@@ -642,6 +665,9 @@ ipcMain.handle("atualizar-aluno", async (_event, leitor: AlunoAtualizacaoEntrada
     const data = await prisma.$transaction(async (tx) => {
       const atual = await tx.aluno.findFirst({ where: { id: leitor.id, ativo: true } });
       if (!atual) throw new Error("O aluno ou professor não foi encontrado.");
+      if (atual.tipo !== preparado.tipo) {
+        throw new Error("Aluno e professor são cadastros distintos. Crie um novo cadastro para alterar o tipo de pessoa.");
+      }
       const atualizado = await tx.aluno.update({ where: { id: leitor.id }, data: preparado });
       await tx.movimentacao.create({
         data: {
@@ -888,7 +914,7 @@ ipcMain.handle("atualizar-livro", async (_event, entrada: LivroAtualizacaoEntrad
     const unidade = entrada.unidade;
 
     return await prisma.$transaction(async (tx) => {
-      const livroAtual = await tx.livro.findUnique({ where: { id }, select: { id: true } });
+      const livroAtual = await tx.livro.findUnique({ where: { id }, select: { id: true, unidade: true } });
       if (!livroAtual) {
         return { success: false, error: "O livro selecionado não foi encontrado." };
       }
@@ -917,13 +943,11 @@ ipcMain.handle("atualizar-livro", async (_event, entrada: LivroAtualizacaoEntrad
         (total, item) => total + Math.max(0, item.quantidade - item.quantidadeDevolvida),
         0,
       );
-      if (unidade < emprestimosAtivos) {
-        const descricao = emprestimosAtivos === 1
-          ? "1 exemplar está emprestado"
-          : `${emprestimosAtivos} exemplares estão emprestados`;
+      const minimoEstoqueTotal = Math.min(livroAtual.unidade, emprestimosAtivos);
+      if (unidade < minimoEstoqueTotal) {
         return {
           success: false,
-          error: `O estoque total não pode ser menor que ${emprestimosAtivos}, pois ${descricao}.`,
+          error: `O estoque total não pode ser menor que ${minimoEstoqueTotal} enquanto houver exemplares pendentes.`,
         };
       }
 
@@ -1110,7 +1134,7 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
 
     const agora = new Date();
     const resultado = await prisma.$transaction(async (tx) => {
-      const candidatos = dados.leitor.id
+      const candidatos = dados.leitor.id || leitorPreparado.tipo === TipoLeitor.PROFESSOR
         ? []
         : await tx.aluno.findMany({
             where: { ativo: true, nome: { equals: leitorPreparado.nome }, tipo: leitorPreparado.tipo },
@@ -1120,6 +1144,9 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
         : candidatos.find((candidato) => chaveSerie(candidato.serie) === chaveSerie(leitorPreparado.serie)) ?? null;
       if (dados.leitor.id && !leitorExistente) throw new Error("O leitor selecionado não foi encontrado.");
       if (leitorExistente && !leitorExistente.ativo) throw new Error("Este cadastro está arquivado e não pode realizar empréstimos.");
+      if (leitorExistente && leitorExistente.tipo !== leitorPreparado.tipo) {
+        throw new Error("Aluno e professor são cadastros distintos. Troque o leitor selecionado em vez de alterar o tipo.");
+      }
       if (leitorExistente?.banidoAte && leitorExistente.banidoAte > agora) {
         const diasRestantes = Math.max(1, Math.ceil((leitorExistente.banidoAte.getTime() - agora.getTime()) / DIA_EM_MS));
         return { aviso: { codigo: "LEITOR_BANIDO", error: `Esse aluno está banido por mais ${diasRestantes} dia(s).`, diasRestantes, alunoId: leitorExistente.id } };
@@ -1133,12 +1160,17 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
         }
       }
 
+      const configuracao = await tx.configuracao.upsert({
+        where: { id: 1 },
+        update: {},
+        create: { ...CONFIGURACAO_PADRAO },
+      });
       const idsLivros = itens.map((item) => item.livroId);
       const livros = await tx.livro.findMany({ where: { id: { in: idsLivros } } });
       if (livros.length !== idsLivros.length) throw new Error("Um ou mais títulos selecionados não foram encontrados.");
       for (const item of itens) {
         const livro = livros.find((registro) => registro.id === item.livroId)!;
-        if (livro.disponiveis < item.quantidade) {
+        if (!configuracao.permitirEmprestimosNegativos && livro.disponiveis < item.quantidade) {
           throw new Error(`Estoque insuficiente para "${livro.titulo}". Disponíveis: ${Math.max(0, livro.disponiveis)}.`);
         }
       }
@@ -1156,10 +1188,9 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
         await tx.movimentacao.create({ data: { tipo: TipoMovimentacao.ALUNO_CADASTRADO, alunoId: pessoa.id, descricao: `${pessoa.tipo === TipoLeitor.PROFESSOR ? "Professor" : "Aluno"} cadastrado durante empréstimo: ${pessoa.nome}.` } });
       }
 
-      const configuracao = pessoa.tipo === TipoLeitor.ALUNO
-        ? await tx.configuracao.upsert({ where: { id: 1 }, update: {}, create: { ...CONFIGURACAO_PADRAO } })
-        : null;
-      if (configuracao?.termoResponsabilidadeAtivo && !configuracao.responsavelBiblioteca.trim()) {
+      if (pessoa.tipo === TipoLeitor.ALUNO
+        && configuracao.termoResponsabilidadeAtivo
+        && !configuracao.responsavelBiblioteca.trim()) {
         throw new Error("Configure o nome do responsável pela biblioteca antes de gerar o termo.");
       }
 
@@ -1167,12 +1198,26 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
       const emprestimos = [];
       for (const item of itens) {
         const livro = livros.find((registro) => registro.id === item.livroId)!;
-        const reserva = await tx.livro.updateMany({
-          where: { id: livro.id, disponiveis: { gte: item.quantidade } },
-          data: { disponiveis: { decrement: item.quantidade } },
-        });
-        if (reserva.count !== 1) throw new Error(`O estoque de "${livro.titulo}" mudou. Confira a seleção e tente novamente.`);
-        const restantes = livro.disponiveis - item.quantidade;
+        if (configuracao.permitirEmprestimosNegativos) {
+          const reserva = await tx.livro.updateMany({
+            where: {
+              id: livro.id,
+              disponiveis: { gte: LIMITE_INTEIRO_NEGATIVO_BANCO + item.quantidade },
+            },
+            data: { disponiveis: { decrement: item.quantidade } },
+          });
+          if (reserva.count !== 1) {
+            throw new Error(`O estoque de "${livro.titulo}" atingiria o limite negativo suportado pelo sistema.`);
+          }
+        } else {
+          const reserva = await tx.livro.updateMany({
+            where: { id: livro.id, disponiveis: { gte: item.quantidade } },
+            data: { disponiveis: { decrement: item.quantidade } },
+          });
+          if (reserva.count !== 1) throw new Error(`O estoque de "${livro.titulo}" mudou. Confira a seleção e tente novamente.`);
+        }
+        const estoqueAtualizado = await tx.livro.findUniqueOrThrow({ where: { id: livro.id } });
+        const restantes = estoqueAtualizado.disponiveis;
         await tx.livro.update({ where: { id: livro.id }, data: { status: restantes > 0 ? StatusLivro.LIVRE : StatusLivro.EMPRESTADO } });
         const emprestimo = await tx.emprestimo.create({
           data: {
@@ -1196,7 +1241,7 @@ ipcMain.handle("cadastrar-emprestimo", async (_event, dados: EmprestimoEntrada) 
         return `${indice + 1}. ${livro.titulo} — ${item.quantidade} unidade(s) — Estado: ${item.estadoLivro}`;
       }).join("\n");
       const dataDevolucao = dataDevolucaoPrevista ? dataDevolucaoPrevista.toLocaleDateString("pt-BR") : "data a combinar";
-      const termo = configuracao?.termoResponsabilidadeAtivo
+      const termo = pessoa.tipo === TipoLeitor.ALUNO && configuracao.termoResponsabilidadeAtivo
         ? {
             conteudo: substituirVariaveis(configuracao.modeloTermo || MODELO_TERMO_PADRAO, {
               nome_aluno: pessoa.nome,
@@ -1239,6 +1284,153 @@ async function atualizarAtrasos() {
     }),
   ]);
 }
+
+const obterHistoricoLeitorBanco = async (alunoId: number) => {
+  const leitor = await prisma.aluno.findUnique({
+    where: { id: alunoId },
+    select: { id: true, nome: true, serie: true, tipo: true, ativo: true },
+  });
+  if (!leitor) throw new Error("O aluno ou professor não foi encontrado.");
+
+  const emprestimos = await prisma.emprestimo.findMany({
+    where: { alunoId },
+    select: {
+      id: true,
+      livro: { select: { titulo: true, autor: true, isbn: true } },
+      dataHoraEmprestimo: true,
+      dataDevolucaoPrevista: true,
+      devolvidoEm: true,
+      status: true,
+      estadoLivro: true,
+      quantidade: true,
+      quantidadeDevolvida: true,
+    },
+    orderBy: [{ dataHoraEmprestimo: "desc" }, { id: "desc" }],
+  });
+
+  return {
+    leitor,
+    itens: emprestimos.map(({ livro, ...emprestimo }) => ({
+      ...emprestimo,
+      livroTitulo: livro.titulo,
+      livroAutor: livro.autor,
+      isbn: livro.isbn,
+      quantidadePendente: Math.max(0, emprestimo.quantidade - emprestimo.quantidadeDevolvida),
+    })),
+  };
+};
+
+ipcMain.handle("obter-historico-leitor", async (_event, alunoId: number) => {
+  try {
+    if (!validarId(alunoId)) return { success: false, error: "O aluno ou professor selecionado é inválido." };
+    await atualizarAtrasos();
+    return { success: true, data: await obterHistoricoLeitorBanco(alunoId) };
+  } catch (e) {
+    return erro(e);
+  }
+});
+
+const nomeSeguroArquivo = (nome: string) => {
+  const semControles = [...nome.normalize("NFD")]
+    .filter((caractere) => caractere.charCodeAt(0) >= 32)
+    .join("");
+  return semControles
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[<>:"/\\|?*]/g, "")
+    .trim()
+    .replace(/\s+/g, "-")
+    .slice(0, 80) || "leitor";
+};
+
+const formatarDataPlanilha = (data: Date | null) => data
+  ? data.toLocaleDateString("pt-BR")
+  : "";
+
+const formatarHoraPlanilha = (data: Date) => data.toLocaleTimeString("pt-BR", {
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+});
+
+const rotuloStatusEmprestimo = (status: StatusEmprestimo) => ({
+  [StatusEmprestimo.ATIVO]: "Ativo",
+  [StatusEmprestimo.ATRASADO]: "Atrasado",
+  [StatusEmprestimo.DEVOLVIDO]: "Devolvido",
+})[status];
+
+ipcMain.handle("exportar-historico-leitor", async (_event, alunoId: number) => {
+  try {
+    if (!validarId(alunoId)) return { success: false, error: "O aluno ou professor selecionado é inválido." };
+    await atualizarAtrasos();
+    const historico = await obterHistoricoLeitorBanco(alunoId);
+    const dataAtual = new Date().toISOString().slice(0, 10);
+    const nomeArquivo = `historico-${nomeSeguroArquivo(historico.leitor.nome)}-${dataAtual}.xlsx`;
+    const opcoes = {
+      title: `Exportar histórico de ${historico.leitor.nome}`,
+      defaultPath: path.join(app.getPath("documents"), nomeArquivo),
+      filters: [{ name: "Planilha do Excel", extensions: ["xlsx"] }],
+    };
+    const escolha = mainWindow && !mainWindow.isDestroyed()
+      ? await dialog.showSaveDialog(mainWindow, opcoes)
+      : await dialog.showSaveDialog(opcoes);
+    if (escolha.canceled || !escolha.filePath) return { success: true, cancelado: true };
+
+    const cabecalho = [
+      "Leitor",
+      "Tipo",
+      "Série / turma",
+      "Livro",
+      "Autor",
+      "ISBN",
+      "Data",
+      "Hora",
+      "Quantidade emprestada",
+      "Quantidade devolvida",
+      "Quantidade pendente",
+      "Devolução prevista",
+      "Devolvido em",
+      "Situação",
+      "Estado do livro",
+    ];
+    const linhas = historico.itens.map((item) => [
+      historico.leitor.nome,
+      historico.leitor.tipo === TipoLeitor.PROFESSOR ? "Professor" : "Aluno",
+      historico.leitor.serie,
+      item.livroTitulo,
+      item.livroAutor,
+      item.isbn || "",
+      formatarDataPlanilha(item.dataHoraEmprestimo),
+      formatarHoraPlanilha(item.dataHoraEmprestimo),
+      item.quantidade,
+      item.quantidadeDevolvida,
+      item.quantidadePendente,
+      formatarDataPlanilha(item.dataDevolucaoPrevista),
+      item.devolvidoEm ? item.devolvidoEm.toLocaleString("pt-BR") : "",
+      rotuloStatusEmprestimo(item.status),
+      item.estadoLivro,
+    ]);
+    const planilha = XLSX.utils.aoa_to_sheet([cabecalho, ...linhas]);
+    planilha["!cols"] = [
+      { wch: 32 }, { wch: 12 }, { wch: 18 },
+      { wch: 36 }, { wch: 28 }, { wch: 18 }, { wch: 12 }, { wch: 10 },
+      { wch: 22 }, { wch: 20 }, { wch: 19 }, { wch: 20 }, { wch: 21 },
+      { wch: 14 }, { wch: 32 },
+    ];
+    const arquivo = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(arquivo, planilha, "Histórico");
+    arquivo.Props = {
+      Title: `Histórico de empréstimos - ${historico.leitor.nome}`,
+      Subject: historico.leitor.tipo === TipoLeitor.PROFESSOR ? "Histórico de professor" : "Histórico de aluno",
+      Author: "EasyLib Manager",
+      CreatedDate: new Date(),
+    };
+    const conteudo = XLSX.write(arquivo, { type: "buffer", bookType: "xlsx", compression: true });
+    await writeFile(escolha.filePath, conteudo);
+    return { success: true, caminho: escolha.filePath };
+  } catch (e) {
+    return erro(e);
+  }
+});
 
 ipcMain.handle("obter-emprestimo", async () => {
   try {
@@ -1364,13 +1556,14 @@ ipcMain.handle("obter-dashboard", async () => {
     const agora = new Date();
     const inicioMes = new Date(agora.getFullYear(), agora.getMonth(), 1);
     const inicioHoje = new Date(agora.getFullYear(), agora.getMonth(), agora.getDate());
+    const somenteAlunos = { aluno: { tipo: TipoLeitor.ALUNO } };
     const [emprestimosMes, ativos, atrasados] = await Promise.all([
       prisma.emprestimo.findMany({
-        where: { dataHoraEmprestimo: { gte: inicioMes } },
+        where: { dataHoraEmprestimo: { gte: inicioMes }, ...somenteAlunos },
         include: { aluno: true, livro: true },
       }),
-      prisma.emprestimo.count({ where: { status: StatusEmprestimo.ATIVO } }),
-      prisma.emprestimo.count({ where: { status: StatusEmprestimo.ATRASADO } }),
+      prisma.emprestimo.count({ where: { status: StatusEmprestimo.ATIVO, ...somenteAlunos } }),
+      prisma.emprestimo.count({ where: { status: StatusEmprestimo.ATRASADO, ...somenteAlunos } }),
     ]);
 
     const maisFrequente = <T extends { nome: string; total: number }>(itens: T[]) =>
@@ -1470,6 +1663,7 @@ type BackupConfiguracao = {
   tipoFolha: string;
   painelDebugAtivo: boolean;
   modoEscuro: boolean;
+  permitirEmprestimosNegativos?: boolean;
 };
 type BackupMovimentacao = {
   id: number;
@@ -1588,7 +1782,9 @@ const validarBackupTotal = (valor: unknown): { success: true; data: BackupTotal 
     || !(item.isbn === null || typeof item.isbn === "string")
     || !(item.editora === null || typeof item.editora === "string")
     || !inteiroValido(item.unidade, 0)
-    || !inteiroValido(item.disponiveis, 0)
+    || !Number.isSafeInteger(item.disponiveis)
+    || Number(item.disponiveis) < LIMITE_INTEIRO_NEGATIVO_BANCO
+    || Number(item.disponiveis) > LIMITE_INTEIRO_BANCO
     || Number(item.disponiveis) > Number(item.unidade)
     || !statusLivros.has(item.status as StatusLivro))) {
     return { success: false, error: "O backup contém um registro de livro inválido." };
@@ -1620,8 +1816,7 @@ const validarBackupTotal = (valor: unknown): { success: true; data: BackupTotal 
   }
   if ((livros as BackupLivro[]).some((livro) => {
     const disponiveisEsperados = livro.unidade - (saldosPorLivro.get(livro.id) || 0);
-    return disponiveisEsperados < 0
-      || livro.disponiveis !== disponiveisEsperados
+    return livro.disponiveis !== disponiveisEsperados
       || livro.status !== (livro.disponiveis > 0 ? StatusLivro.LIVRE : StatusLivro.EMPRESTADO);
   })) {
     return { success: false, error: "O estoque do backup não corresponde aos empréstimos pendentes." };
@@ -1635,7 +1830,9 @@ const validarBackupTotal = (valor: unknown): { success: true; data: BackupTotal 
     || Number(item.paresTermosPorFolha) > 4
     || !["A4", "CARTA", "OFICIO"].includes(String(item.tipoFolha))
     || typeof item.painelDebugAtivo !== "boolean"
-    || typeof item.modoEscuro !== "boolean")) {
+    || typeof item.modoEscuro !== "boolean"
+    || !(item.permitirEmprestimosNegativos === undefined
+      || typeof item.permitirEmprestimosNegativos === "boolean"))) {
     return { success: false, error: "A configuração contida no backup é inválida." };
   }
   if (movimentacoes.some((item) => !ehRegistro(item)
@@ -1752,6 +1949,7 @@ ipcMain.handle("confirmar-importacao-total", async (_event, token: string) => {
         await tx.aluno.createMany({
           data: dados.alunos.slice(inicio, inicio + 500).map((aluno) => ({
             ...aluno,
+            serie: aluno.tipo === TipoLeitor.PROFESSOR ? "" : aluno.serie,
             banidoAte: aluno.banidoAte ? new Date(aluno.banidoAte) : null,
           })),
         });
@@ -1759,7 +1957,14 @@ ipcMain.handle("confirmar-importacao-total", async (_event, token: string) => {
       for (let inicio = 0; inicio < dados.livros.length; inicio += 500) {
         await tx.livro.createMany({ data: dados.livros.slice(inicio, inicio + 500) });
       }
-      if (dados.configuracoes.length) await tx.configuracao.createMany({ data: dados.configuracoes });
+      if (dados.configuracoes.length) {
+        await tx.configuracao.createMany({
+          data: dados.configuracoes.map((configuracao) => ({
+            ...configuracao,
+            permitirEmprestimosNegativos: configuracao.permitirEmprestimosNegativos ?? false,
+          })),
+        });
+      }
       for (let inicio = 0; inicio < dados.emprestimos.length; inicio += 500) {
         await tx.emprestimo.createMany({
           data: dados.emprestimos.slice(inicio, inicio + 500).map((emprestimo) => ({

@@ -7,21 +7,21 @@ datasource db {
 }
 
 model Aluno {
-  id               Int          @id @default(autoincrement())
-  nome             String
-  serie            String       @default("")
-  tipo             TipoLeitor   @default(ALUNO)
-  ativo             Boolean      @default(true)
-  banidoAte         DateTime?
-  motivoBanimento   String?
-  emprestimos       Emprestimo[]
+  id              Int          @id @default(autoincrement())
+  nome            String
+  serie           String       @default("")
+  tipo            TipoLeitor   @default(ALUNO)
+  ativo           Boolean      @default(true)
+  banidoAte       DateTime?
+  motivoBanimento String?
+  emprestimos     Emprestimo[]
 
   @@index([ativo, nome])
   @@map("alunos")
 }
 
 model Livro {
-  id           Int          @id @default(autoincrement()) @unique
+  id           Int          @id @unique @default(autoincrement())
   titulo       String
   autor        String       @default("")
   numeroEdicao Int?
@@ -57,25 +57,26 @@ model Emprestimo {
 }
 
 model Configuracao {
-  id                      Int     @id @default(1)
-  termoResponsabilidadeAtivo Boolean @default(true)
-  responsavelBiblioteca   String  @default("")
-  modeloTermo             String  @default("")
-  paresTermosPorFolha     Int     @default(2)
-  tipoFolha               String  @default("A4")
-  painelDebugAtivo        Boolean @default(true)
-  modoEscuro              Boolean @default(false)
+  id                           Int     @id @default(1)
+  termoResponsabilidadeAtivo   Boolean @default(true)
+  responsavelBiblioteca        String  @default("")
+  modeloTermo                  String  @default("")
+  paresTermosPorFolha          Int     @default(2)
+  tipoFolha                    String  @default("A4")
+  painelDebugAtivo             Boolean @default(true)
+  modoEscuro                   Boolean @default(false)
+  permitirEmprestimosNegativos Boolean @default(false)
 
   @@map("configuracoes")
 }
 
 model Movimentacao {
-  id        Int               @id @default(autoincrement())
+  id        Int              @id @default(autoincrement())
   tipo      TipoMovimentacao
   descricao String
   alunoId   Int?
   livroId   Int?
-  criadoEm  DateTime          @default(now())
+  criadoEm  DateTime         @default(now())
 
   @@index([criadoEm])
   @@map("movimentacoes")

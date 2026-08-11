@@ -74,9 +74,19 @@ function IconeLua() {
     );
 }
 
+function IconeEstoqueNegativo() {
+    return (
+        <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" className="h-6 w-6">
+            <path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z" strokeWidth="1.8" strokeLinejoin="round" />
+            <path d="m4.5 7.8 7.5 4.1 7.5-4.1M12 12v8.5M8.5 8.8h7M9 15.5h6" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+    );
+}
+
 export default function Configuracoes() {
     const [configuracao, setConfiguracao] = useState<Configuracao>({
         termoResponsabilidadeAtivo: true,
+        permitirEmprestimosNegativos: false,
         responsavelBiblioteca: "",
         modeloTermo: "",
         paresTermosPorFolha: 2,
@@ -95,7 +105,12 @@ export default function Configuracoes() {
 
     useEffect(() => {
         window.electronAPI.obterConfiguracao().then((resposta) => {
-            if (resposta.success && resposta.data) setConfiguracao(resposta.data);
+            if (resposta.success && resposta.data) {
+                setConfiguracao({
+                    ...resposta.data,
+                    permitirEmprestimosNegativos: resposta.data.permitirEmprestimosNegativos ?? false,
+                });
+            }
             else setErro(resposta.error || "Não foi possível carregar as configurações.");
             setCarregando(false);
         }).catch((falha) => {
@@ -202,7 +217,7 @@ export default function Configuracoes() {
                     <div className="relative">
                         <p className="app-eyebrow text-xs font-semibold tracking-[0.18em] text-cyan-700 mb-2">PREFERÊNCIAS</p>
                         <h1 className="text-4xl font-semibold tracking-tight">Configurações</h1>
-                        <p className="text-cyan-50/85 mt-2">Personalize termos, impressão e ferramentas do sistema.</p>
+                        <p className="text-cyan-50/85 mt-2">Personalize empréstimos, termos, impressão e ferramentas do sistema.</p>
                     </div>
                 </header>
 
@@ -224,7 +239,7 @@ export default function Configuracoes() {
                     <div className="rounded-2xl border-2 border-cyan-200 bg-cyan-50 p-8 text-cyan-900 shadow-sm">Carregando configurações...</div>
                 ) : (
                     <div className="space-y-6">
-                        <div className="grid gap-5 lg:grid-cols-3">
+                        <div className="grid gap-5 md:grid-cols-2">
                             <section className="app-panel rounded-xl p-6 transition-colors">
                                 <label className="flex h-full cursor-pointer items-start justify-between gap-5">
                                     <span>
@@ -275,6 +290,28 @@ export default function Configuracoes() {
                                             setConfiguracao((atual) => ({ ...atual, modoEscuro }));
                                             document.documentElement.dataset.theme = modoEscuro ? "dark" : "light";
                                         }}
+                                    />
+                                </label>
+                            </section>
+
+                            <section className="app-panel rounded-xl border-2 border-amber-200 p-6 transition-colors">
+                                <label className="flex h-full cursor-pointer items-start justify-between gap-5">
+                                    <span>
+                                        <span className="mb-3 flex h-10 w-10 items-center justify-center rounded-lg bg-amber-100 text-amber-800" aria-hidden="true">
+                                            <IconeEstoqueNegativo />
+                                        </span>
+                                        <strong className="block text-lg text-slate-900">Permitir empréstimos negativos</strong>
+                                        <span className="mt-1 block text-sm leading-relaxed text-slate-500">
+                                            Permite emprestar um livro mesmo sem unidades disponíveis. O estoque ficará negativo até que exemplares sejam devolvidos ou adicionados.
+                                        </span>
+                                    </span>
+                                    <Interruptor
+                                        ativo={configuracao.permitirEmprestimosNegativos}
+                                        rotulo="Permitir empréstimos negativos"
+                                        aoAlterar={(permitirEmprestimosNegativos) => setConfiguracao((atual) => ({
+                                            ...atual,
+                                            permitirEmprestimosNegativos,
+                                        }))}
                                     />
                                 </label>
                             </section>

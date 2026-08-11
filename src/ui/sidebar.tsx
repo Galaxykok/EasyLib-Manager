@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { Link, useLocation } from "react-router-dom";
 import logo from "./assets/icon.png";
 
-type Icone = "home" | "acervo" | "emprestimos" | "alunos" | "exportacao" | "debug" | "configuracoes";
+type Icone = "home" | "acervo" | "emprestimos" | "alunos" | "exportacao" | "debug" | "configuracoes" | "sobre";
 const CHAVE_TEMA = "easylib-tema";
 
 try {
@@ -24,6 +24,7 @@ function IconeMenu({ tipo }: { tipo: Icone }) {
         exportacao: <><path d="M12 3v12"/><path d="m7 10 5 5 5-5"/><path d="M5 21h14"/></>,
         debug: <><path d="m8 9-4 3 4 3"/><path d="m16 9 4 3-4 3"/><path d="m14 5-4 14"/></>,
         configuracoes: <><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.9l.1.1-2.8 2.8-.1-.1a1.7 1.7 0 0 0-1.9-.3 1.7 1.7 0 0 0-1 1.6v.2h-4V21a1.7 1.7 0 0 0-1-1.6 1.7 1.7 0 0 0-1.9.3l-.1.1L4.2 17l.1-.1a1.7 1.7 0 0 0 .3-1.9A1.7 1.7 0 0 0 3 14H2.8v-4H3a1.7 1.7 0 0 0 1.6-1 1.7 1.7 0 0 0-.3-1.9L4.2 7 7 4.2l.1.1a1.7 1.7 0 0 0 1.9.3A1.7 1.7 0 0 0 10 3V2.8h4V3a1.7 1.7 0 0 0 1 1.6 1.7 1.7 0 0 0 1.9-.3l.1-.1L19.8 7l-.1.1a1.7 1.7 0 0 0-.3 1.9 1.7 1.7 0 0 0 1.6 1h.2v4H21a1.7 1.7 0 0 0-1.6 1Z"/></>,
+        sobre: <><circle cx="12" cy="12" r="9"/><path d="M12 11v6"/><path d="M12 7h.01"/></>,
     };
     return <svg viewBox="0 0 24 24" className="w-5 h-5" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{caminhos[tipo]}</svg>;
 }
@@ -62,10 +63,11 @@ export default function Sidebar() {
         { rota: "/", texto: "Início", icone: "home" },
         { rota: "/acervo", texto: "Acervo", icone: "acervo" },
         { rota: "/emprestimos", texto: "Empréstimos", icone: "emprestimos" },
-        { rota: "/aluno", texto: "Alunos", icone: "alunos" },
+        { rota: "/aluno", texto: "Alunos / Professores", icone: "alunos" },
         { rota: "/exportacao", texto: "Exportação", icone: "exportacao" },
         ...(debugAtivo ? [{ rota: "/debug", texto: "Debug", icone: "debug" as Icone }] : []),
         { rota: "/configuracoes", texto: "Configurações", icone: "configuracoes" },
+        { rota: "/sobre", texto: "Sobre", icone: "sobre" },
     ];
 
     return (
@@ -81,7 +83,7 @@ export default function Sidebar() {
             </div>
 
             <p className="relative px-4 mb-2 text-[10px] font-semibold tracking-[0.18em] text-slate-400">NAVEGAÇÃO</p>
-            <nav className="relative flex flex-col gap-1.5">
+            <nav className="relative flex min-h-0 flex-1 flex-col gap-1.5 overflow-y-auto pr-1">
                 {itens.map((item) => {
                     const ativo = item.rota === "/"
                         ? location.pathname === "/"

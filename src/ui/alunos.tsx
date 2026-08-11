@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type {
     ChangeEvent,
     FormEvent,
@@ -17,6 +17,13 @@ interface FeedbackAlunos {
     mensagem: string;
 }
 
+interface FeedbackHistorico {
+    tipo: "sucesso" | "erro" | "info";
+    mensagem: string;
+}
+
+type AbaEditor = "cadastro" | "historico";
+
 const FORMULARIO_VAZIO: FormularioAluno = {
     nome: "",
     serie: "",
@@ -24,6 +31,16 @@ const FORMULARIO_VAZIO: FormularioAluno = {
 };
 
 const UM_DIA = 24 * 60 * 60 * 1000;
+const FORMATADOR_DATA = new Intl.DateTimeFormat("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+});
+const FORMATADOR_HORA = new Intl.DateTimeFormat("pt-BR", {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+});
 const SELETOR_ELEMENTOS_FOCAVEIS = [
     "a[href]",
     "button:not([disabled])",
@@ -54,7 +71,31 @@ const alunoCorrespondeBusca = (aluno: Aluno, busca: string) => {
     if (!termo) return true;
 
     const tipo = aluno.tipo === "PROFESSOR" ? "professor" : "aluno";
-    return normalizarTexto(`${aluno.id} ${aluno.nome} ${aluno.serie} ${tipo}`).includes(termo);
+    const serie = aluno.tipo === "ALUNO" ? aluno.serie : "";
+    return normalizarTexto(`${aluno.id} ${aluno.nome} ${serie} ${tipo}`).includes(termo);
+};
+
+const formatarDataHoraHistorico = (valor: Date | string) => {
+    const dataHora = new Date(valor);
+    if (Number.isNaN(dataHora.getTime())) {
+        return { data: "Data indisponível", hora: "--:--", iso: undefined };
+    }
+
+    return {
+        data: FORMATADOR_DATA.format(dataHora),
+        hora: FORMATADOR_HORA.format(dataHora),
+        iso: dataHora.toISOString(),
+    };
+};
+
+const obterApresentacaoStatus = (status: HistoricoEmprestimoLeitorItem["status"]) => {
+    if (status === "DEVOLVIDO") {
+        return { rotulo: "Devolvido", classe: "border-emerald-200 bg-emerald-50 text-emerald-700" };
+    }
+    if (status === "ATRASADO") {
+        return { rotulo: "Atrasado", classe: "border-red-200 bg-red-50 text-red-700" };
+    }
+    return { rotulo: "Em andamento", classe: "border-amber-200 bg-amber-50 text-amber-700" };
 };
 
 const controlarTecladoDialogo = (
@@ -102,6 +143,7 @@ export default function Alunos() {
     const [salvandoCadastro, setSalvandoCadastro] = useState(false);
 
     const [alunoSelecionado, setAlunoSelecionado] = useState<Aluno | null>(null);
+    const [abaEditor, setAbaEditor] = useState<AbaEditor>("cadastro");
     const [formEdicao, setFormEdicao] = useState<FormularioAluno>(FORMULARIO_VAZIO);
     const [erroEdicao, setErroEdicao] = useState("");
     const [salvandoEdicao, setSalvandoEdicao] = useState(false);
@@ -109,6 +151,12 @@ export default function Alunos() {
     const [motivoBanimento, setMotivoBanimento] = useState("");
     const [processandoBanimento, setProcessandoBanimento] = useState(false);
     const [confirmandoRemocaoBanimento, setConfirmandoRemocaoBanimento] = useState(false);
+    const [historicoLeitor, setHistoricoLeitor] = useState<HistoricoEmprestimosLeitor | null>(null);
+    const [carregandoHistorico, setCarregandoHistorico] = useState(false);
+    const [erroHistorico, setErroHistorico] = useState("");
+    const [exportandoHistorico, setExportandoHistorico] = useState(false);
+    const [feedbackHistorico, setFeedbackHistorico] = useState<FeedbackHistorico | null>(null);
+    const requisicaoHistoricoAtual = useRef(0);
 
     const [modalExclusaoAberto, setModalExclusaoAberto] = useState(false);
     const [buscaExclusao, setBuscaExclusao] = useState("");
@@ -210,7 +258,18 @@ export default function Alunos() {
         definir: React.Dispatch<React.SetStateAction<FormularioAluno>>,
     ) => {
         const { name, value } = evento.target;
-        definir((atual) => ({ ...atual, [name]: value }));
+        definir((atual) => {
+            if (name === "tipo") {
+                const tipo = value as FormularioAluno["tipo"];
+                return {
+                    ...atual,
+                    tipo,
+                    serie: tipo === "PROFESSOR" ? "" : atual.serie,
+                };
+            }
+
+            return { ...atual, [name]: value };
+        });
     };
 
     const fecharCadastro = () => {
@@ -221,23 +280,105 @@ export default function Alunos() {
     };
 
     const abrirEditor = (aluno: Aluno) => {
+        requisicaoHistoricoAtual.current += 1;
         setAlunoSelecionado(aluno);
+        setAbaEditor("cadastro");
         setFormEdicao({
             nome: aluno.nome,
-            serie: aluno.serie,
+            serie: aluno.tipo === "ALUNO" ? aluno.serie : "",
             tipo: aluno.tipo,
         });
         setErroEdicao("");
         setDiasBanimento("7");
         setMotivoBanimento("");
         setConfirmandoRemocaoBanimento(false);
+        setHistoricoLeitor(null);
+        setCarregandoHistorico(false);
+        setErroHistorico("");
+        setExportandoHistorico(false);
+        setFeedbackHistorico(null);
     };
 
     const fecharEditor = () => {
-        if (salvandoEdicao || processandoBanimento) return;
+        if (salvandoEdicao || processandoBanimento || exportandoHistorico) return;
+        requisicaoHistoricoAtual.current += 1;
         setAlunoSelecionado(null);
+        setAbaEditor("cadastro");
         setErroEdicao("");
         setConfirmandoRemocaoBanimento(false);
+        setHistoricoLeitor(null);
+        setCarregandoHistorico(false);
+        setErroHistorico("");
+        setFeedbackHistorico(null);
+    };
+
+    const carregarHistoricoLeitor = async (alunoId: number) => {
+        const numeroRequisicao = requisicaoHistoricoAtual.current + 1;
+        requisicaoHistoricoAtual.current = numeroRequisicao;
+        setCarregandoHistorico(true);
+        setErroHistorico("");
+        setFeedbackHistorico(null);
+
+        try {
+            const resposta = await window.electronAPI.obterHistoricoLeitor(alunoId);
+            if (requisicaoHistoricoAtual.current !== numeroRequisicao) return;
+
+            if (!resposta.success || !resposta.data) {
+                setHistoricoLeitor(null);
+                setErroHistorico(resposta.error || "Não foi possível carregar o histórico de empréstimos.");
+                return;
+            }
+
+            setHistoricoLeitor(resposta.data);
+        } catch (erro) {
+            if (requisicaoHistoricoAtual.current !== numeroRequisicao) return;
+            console.error("Erro ao carregar histórico do leitor:", erro);
+            setHistoricoLeitor(null);
+            setErroHistorico("Não foi possível carregar o histórico de empréstimos.");
+        } finally {
+            if (requisicaoHistoricoAtual.current === numeroRequisicao) {
+                setCarregandoHistorico(false);
+            }
+        }
+    };
+
+    const abrirHistorico = () => {
+        if (!alunoSelecionado) return;
+        setAbaEditor("historico");
+        void carregarHistoricoLeitor(alunoSelecionado.id);
+    };
+
+    const handleExportarHistorico = async () => {
+        if (!alunoSelecionado) return;
+
+        setExportandoHistorico(true);
+        setFeedbackHistorico(null);
+        try {
+            const resposta = await window.electronAPI.exportarHistoricoLeitor(alunoSelecionado.id);
+            if (resposta.cancelado) {
+                setFeedbackHistorico({ tipo: "info", mensagem: "Exportação cancelada." });
+                return;
+            }
+            if (!resposta.success) {
+                setFeedbackHistorico({
+                    tipo: "erro",
+                    mensagem: resposta.error || "Não foi possível exportar o histórico.",
+                });
+                return;
+            }
+
+            setFeedbackHistorico({
+                tipo: "sucesso",
+                mensagem: resposta.caminho
+                    ? `Planilha salva em ${resposta.caminho}`
+                    : "Planilha exportada com sucesso.",
+            });
+        } catch (erro) {
+            console.error("Erro ao exportar histórico do leitor:", erro);
+            setFeedbackHistorico({ tipo: "erro", mensagem: "Não foi possível exportar o histórico." });
+        } finally {
+            setExportandoHistorico(false);
+        }
     };
 
     const handleCadastrar = async (evento: FormEvent<HTMLFormElement>) => {
@@ -245,7 +386,7 @@ export default function Alunos() {
         setErroCadastro("");
 
         const nome = formCadastro.nome.trim();
-        const serie = formCadastro.serie.trim();
+        const serie = formCadastro.tipo === "ALUNO" ? formCadastro.serie.trim() : "";
         if (!nome) {
             setErroCadastro("Informe o nome.");
             return;
@@ -288,7 +429,7 @@ export default function Alunos() {
 
         setErroEdicao("");
         const nome = formEdicao.nome.trim();
-        const serie = formEdicao.serie.trim();
+        const serie = formEdicao.tipo === "ALUNO" ? formEdicao.serie.trim() : "";
 
         if (!nome) {
             setErroEdicao("Informe o nome.");
@@ -315,6 +456,8 @@ export default function Alunos() {
             }
 
             await carregarAlunos();
+            requisicaoHistoricoAtual.current += 1;
+            setHistoricoLeitor(null);
             setAlunoSelecionado(null);
             setFeedback({
                 tipo: "sucesso",
@@ -465,7 +608,7 @@ export default function Alunos() {
                     <div className="contents">
                         <header className="app-page-header order-1 mb-5 px-6 py-5">
                             <p className="app-eyebrow mb-1 text-xs font-semibold tracking-[0.18em] text-cyan-700">COMUNIDADE</p>
-                            <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Alunos e professores</h1>
+                            <h1 className="text-4xl font-semibold tracking-tight text-slate-900">Alunos / Professores</h1>
                             <p className="mt-1 text-sm text-slate-600">Atualize turmas, identifique impedimentos e mantenha os cadastros organizados.</p>
                         </header>
 
@@ -505,7 +648,9 @@ export default function Alunos() {
                                                 <span className="w-fit rounded-lg border border-cyan-100 bg-cyan-50 px-2.5 py-1.5 font-mono text-xs font-semibold text-cyan-800">{aluno.id}</span>
                                                 <span className="flex min-w-0 flex-col">
                                                     <span className={`truncate text-lg font-semibold ${banido ? "text-red-700" : "text-slate-800"}`}>{aluno.nome}</span>
-                                                    <span className="truncate text-sm text-slate-500">{aluno.serie || (aluno.tipo === "PROFESSOR" ? "Sem área informada" : "Turma não informada")}</span>
+                                                    {aluno.tipo === "ALUNO" && (
+                                                        <span className="truncate text-sm text-slate-500">{aluno.serie || "Turma não informada"}</span>
+                                                    )}
                                                 </span>
                                                 <span className={`w-fit rounded-full px-3 py-1 text-sm font-semibold ${
                                                     aluno.tipo === "PROFESSOR"
@@ -593,13 +738,15 @@ export default function Alunos() {
                                 </select>
                             </label>
                             <label className="flex flex-col gap-1" htmlFor="cadastro-nome">
-                                <span className="text-sm font-medium text-gray-700">Nome</span>
+                                <span className="text-sm font-medium text-gray-700">Nome completo</span>
                                 <input id="cadastro-nome" required name="nome" value={formCadastro.nome} onChange={(evento) => atualizarFormulario(evento, setFormCadastro)} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
                             </label>
-                            <label className="flex flex-col gap-1" htmlFor="cadastro-serie">
-                                <span className="text-sm font-medium text-gray-700">{formCadastro.tipo === "PROFESSOR" ? "Área, disciplina ou identificação (opcional)" : "Série / turma"}</span>
-                                <input id="cadastro-serie" required={formCadastro.tipo === "ALUNO"} name="serie" value={formCadastro.serie} onChange={(evento) => atualizarFormulario(evento, setFormCadastro)} placeholder={formCadastro.tipo === "ALUNO" ? "Ex.: 7º ano A" : "Ex.: Matemática"} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
-                            </label>
+                            {formCadastro.tipo === "ALUNO" && (
+                                <label className="flex flex-col gap-1" htmlFor="cadastro-serie">
+                                    <span className="text-sm font-medium text-gray-700">Série / turma</span>
+                                    <input id="cadastro-serie" required name="serie" value={formCadastro.serie} onChange={(evento) => atualizarFormulario(evento, setFormCadastro)} placeholder="Ex.: 7º ano A" className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+                                </label>
+                            )}
 
                             {erroCadastro && <div role="alert" className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">{erroCadastro}</div>}
 
@@ -615,29 +762,66 @@ export default function Alunos() {
             {alunoSelecionado && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-5 backdrop-blur-sm">
                     <div role="dialog" aria-modal="true" aria-labelledby="titulo-edicao-pessoa" onKeyDown={(evento) => controlarTecladoDialogo(evento, fecharEditor)} className="relative max-h-[94vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-cyan-200 bg-sky-50 p-8 shadow-2xl">
-                        <button type="button" onClick={fecharEditor} disabled={salvandoEdicao || processandoBanimento} aria-label="Fechar edição" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg text-2xl text-gray-500 hover:bg-sky-100 hover:text-gray-800 disabled:opacity-50">&times;</button>
+                        <button type="button" onClick={fecharEditor} disabled={salvandoEdicao || processandoBanimento || exportandoHistorico} aria-label="Fechar edição" className="absolute right-4 top-4 flex h-9 w-9 items-center justify-center rounded-lg text-2xl text-gray-500 hover:bg-sky-100 hover:text-gray-800 disabled:opacity-50">&times;</button>
                         <div className="mb-6 pr-10">
                             <p className="mb-1 text-xs font-bold uppercase tracking-[0.14em] text-cyan-700">Cadastro #{alunoSelecionado.id}</p>
-                            <h2 id="titulo-edicao-pessoa" className="text-3xl font-semibold text-gray-900">Editar aluno ou professor</h2>
+                            <h2 id="titulo-edicao-pessoa" className="truncate text-3xl font-semibold text-gray-900">{alunoSelecionado.nome}</h2>
                         </div>
 
-                        <form onSubmit={handleSalvarEdicao} className="space-y-4">
+                        <div role="tablist" aria-label="Informações do cadastro" className="mb-5 grid grid-cols-2 gap-2 rounded-xl border border-cyan-200 bg-cyan-50 p-1.5">
+                            <button
+                                type="button"
+                                id="aba-cadastro-leitor"
+                                role="tab"
+                                aria-selected={abaEditor === "cadastro"}
+                                aria-controls="painel-cadastro-leitor"
+                                onClick={() => setAbaEditor("cadastro")}
+                                className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-300/60 ${
+                                    abaEditor === "cadastro"
+                                        ? "bg-cyan-700 text-white shadow-sm"
+                                        : "text-cyan-900 hover:bg-white"
+                                }`}
+                            >
+                                Dados e banimento
+                            </button>
+                            <button
+                                type="button"
+                                id="aba-historico-leitor"
+                                role="tab"
+                                aria-selected={abaEditor === "historico"}
+                                aria-controls="painel-historico-leitor"
+                                onClick={abrirHistorico}
+                                className={`rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-cyan-300/60 ${
+                                    abaEditor === "historico"
+                                        ? "bg-cyan-700 text-white shadow-sm"
+                                        : "text-cyan-900 hover:bg-white"
+                                }`}
+                            >
+                                Histórico de empréstimos
+                            </button>
+                        </div>
+
+                        {abaEditor === "cadastro" ? (
+                            <form id="painel-cadastro-leitor" role="tabpanel" aria-labelledby="aba-cadastro-leitor" onSubmit={handleSalvarEdicao} className="space-y-4">
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <label className="flex flex-col gap-1" htmlFor="edicao-tipo">
                                     <span className="text-sm font-medium text-gray-700">Tipo de pessoa</span>
-                                    <select id="edicao-tipo" name="tipo" autoFocus value={formEdicao.tipo} onChange={(evento) => atualizarFormulario(evento, setFormEdicao)} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200">
+                                    <select id="edicao-tipo" name="tipo" disabled value={formEdicao.tipo} onChange={(evento) => atualizarFormulario(evento, setFormEdicao)} className="cursor-not-allowed rounded-xl border border-slate-300 bg-slate-100 p-2.5 text-slate-600 shadow-sm">
                                         <option value="ALUNO">Aluno</option>
                                         <option value="PROFESSOR">Professor</option>
                                     </select>
+                                    <span className="text-xs font-normal text-slate-500">O tipo do cadastro não pode ser alterado.</span>
                                 </label>
-                                <label className="flex flex-col gap-1" htmlFor="edicao-serie">
-                                    <span className="text-sm font-medium text-gray-700">{formEdicao.tipo === "PROFESSOR" ? "Área, disciplina ou identificação" : "Série / turma"}</span>
-                                    <input id="edicao-serie" required={formEdicao.tipo === "ALUNO"} name="serie" value={formEdicao.serie} onChange={(evento) => atualizarFormulario(evento, setFormEdicao)} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
-                                </label>
+                                {formEdicao.tipo === "ALUNO" && (
+                                    <label className="flex flex-col gap-1" htmlFor="edicao-serie">
+                                        <span className="text-sm font-medium text-gray-700">Série / turma</span>
+                                        <input id="edicao-serie" required name="serie" value={formEdicao.serie} onChange={(evento) => atualizarFormulario(evento, setFormEdicao)} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+                                    </label>
+                                )}
                             </div>
                             <label className="flex flex-col gap-1" htmlFor="edicao-nome">
-                                <span className="text-sm font-medium text-gray-700">Nome</span>
-                                <input id="edicao-nome" required name="nome" value={formEdicao.nome} onChange={(evento) => atualizarFormulario(evento, setFormEdicao)} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
+                                <span className="text-sm font-medium text-gray-700">Nome completo</span>
+                                <input id="edicao-nome" autoFocus required name="nome" value={formEdicao.nome} onChange={(evento) => atualizarFormulario(evento, setFormEdicao)} className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200" />
                             </label>
 
                             <div className={`rounded-2xl border p-5 ${diasRestantesSelecionado > 0 ? "border-red-300 bg-red-50" : "border-amber-200 bg-amber-50"}`}>
@@ -691,7 +875,115 @@ export default function Alunos() {
                                 <button type="button" onClick={fecharEditor} disabled={salvandoEdicao || processandoBanimento} className="rounded-xl bg-gray-200 px-5 py-2.5 text-gray-700 hover:bg-gray-300 disabled:opacity-50">Cancelar</button>
                                 <button type="submit" disabled={salvandoEdicao || processandoBanimento} className="rounded-xl bg-cyan-700 px-6 py-2.5 font-semibold text-white shadow-sm hover:bg-cyan-800 disabled:opacity-60">{salvandoEdicao ? "Salvando..." : "Salvar alterações"}</button>
                             </div>
-                        </form>
+                            </form>
+                        ) : (
+                            <section id="painel-historico-leitor" role="tabpanel" aria-labelledby="aba-historico-leitor" className="space-y-4">
+                                <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-cyan-200 bg-white px-4 py-3">
+                                    <div>
+                                        <h3 className="font-semibold text-slate-900">Livros emprestados</h3>
+                                        <p className="mt-0.5 text-xs text-slate-600">
+                                            {historicoLeitor
+                                                ? `${historicoLeitor.itens.length} ${historicoLeitor.itens.length === 1 ? "registro encontrado" : "registros encontrados"}`
+                                                : "Consulte todos os empréstimos deste cadastro."}
+                                        </p>
+                                    </div>
+                                    <div className="flex flex-wrap gap-2">
+                                        <button
+                                            type="button"
+                                            disabled={carregandoHistorico || exportandoHistorico}
+                                            onClick={() => void carregarHistoricoLeitor(alunoSelecionado.id)}
+                                            className="rounded-lg border border-cyan-300 bg-white px-3.5 py-2 text-sm font-semibold text-cyan-800 hover:bg-cyan-50 disabled:opacity-50"
+                                        >
+                                            Atualizar
+                                        </button>
+                                        <button
+                                            type="button"
+                                            disabled={carregandoHistorico || exportandoHistorico || !historicoLeitor?.itens.length}
+                                            onClick={handleExportarHistorico}
+                                            className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-800 disabled:opacity-50"
+                                        >
+                                            {exportandoHistorico ? "Exportando..." : "Exportar planilha"}
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {feedbackHistorico && (
+                                    <div
+                                        role={feedbackHistorico.tipo === "erro" ? "alert" : "status"}
+                                        aria-live={feedbackHistorico.tipo === "erro" ? "assertive" : "polite"}
+                                        className={`break-words rounded-xl border px-4 py-3 text-sm font-medium ${
+                                            feedbackHistorico.tipo === "sucesso"
+                                                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                                                : feedbackHistorico.tipo === "erro"
+                                                    ? "border-red-200 bg-red-50 text-red-700"
+                                                    : "border-slate-200 bg-slate-50 text-slate-700"
+                                        }`}
+                                    >
+                                        {feedbackHistorico.mensagem}
+                                    </div>
+                                )}
+
+                                <div className="max-h-[min(48vh,30rem)] overflow-y-auto overscroll-contain rounded-xl border border-sky-200 bg-slate-50 p-2 pr-1.5">
+                                    {carregandoHistorico ? (
+                                        <div role="status" className="flex min-h-52 items-center justify-center px-4 text-center text-sm font-medium text-slate-600">
+                                            Carregando histórico de empréstimos...
+                                        </div>
+                                    ) : erroHistorico ? (
+                                        <div className="flex min-h-52 flex-col items-center justify-center gap-4 px-4 text-center">
+                                            <p role="alert" className="text-sm font-medium text-red-700">{erroHistorico}</p>
+                                            <button type="button" onClick={() => void carregarHistoricoLeitor(alunoSelecionado.id)} className="rounded-lg border border-red-300 bg-white px-4 py-2 text-sm font-semibold text-red-700 hover:bg-red-50">
+                                                Tentar novamente
+                                            </button>
+                                        </div>
+                                    ) : !historicoLeitor?.itens.length ? (
+                                        <div className="flex min-h-52 flex-col items-center justify-center px-4 text-center">
+                                            <div aria-hidden="true" className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-sky-100 text-2xl text-cyan-700">○</div>
+                                            <p className="font-semibold text-slate-800">Nenhum empréstimo registrado</p>
+                                            <p className="mt-1 max-w-sm text-sm text-slate-500">Os livros emprestados para esta pessoa aparecerão aqui.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-2">
+                                            <div aria-hidden="true" className="hidden grid-cols-[minmax(0,1fr)_104px_68px_126px] gap-3 px-3 pb-1 text-xs font-bold uppercase tracking-[0.08em] text-slate-500 sm:grid">
+                                                <span>Livro</span>
+                                                <span>Data</span>
+                                                <span>Hora</span>
+                                                <span>Status</span>
+                                            </div>
+                                            {historicoLeitor.itens.map((item) => {
+                                                const dataHora = formatarDataHoraHistorico(item.dataHoraEmprestimo);
+                                                const status = obterApresentacaoStatus(item.status);
+                                                return (
+                                                    <article key={item.id} className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-sm sm:grid-cols-[minmax(0,1fr)_104px_68px_126px] sm:items-center">
+                                                        <div className="min-w-0">
+                                                            <h4 className="truncate font-semibold text-slate-900" title={item.livroTitulo}>{item.livroTitulo}</h4>
+                                                            <p className="truncate text-xs text-slate-500" title={item.livroAutor}>{item.livroAutor || "Autor não informado"}</p>
+                                                            <p className="mt-1 text-xs text-slate-600">
+                                                                Quantidade: {item.quantidade}
+                                                                {item.quantidadeDevolvida > 0 ? ` · Devolvida: ${item.quantidadeDevolvida}` : ""}
+                                                                {item.quantidadePendente > 0 ? ` · Pendente: ${item.quantidadePendente}` : ""}
+                                                            </p>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-xs font-medium text-slate-500 sm:hidden">Data: </span>
+                                                            <time dateTime={dataHora.iso} className="text-sm font-semibold text-slate-700">{dataHora.data}</time>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-xs font-medium text-slate-500 sm:hidden">Hora: </span>
+                                                            <span className="text-sm font-semibold text-slate-700">{dataHora.hora}</span>
+                                                        </div>
+                                                        <span className={`w-fit rounded-full border px-2.5 py-1 text-xs font-bold ${status.classe}`}>{status.rotulo}</span>
+                                                    </article>
+                                                );
+                                            })}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="flex justify-end border-t border-sky-200 pt-4">
+                                    <button type="button" onClick={fecharEditor} disabled={exportandoHistorico} className="rounded-xl bg-gray-200 px-5 py-2.5 text-gray-700 hover:bg-gray-300 disabled:opacity-50">Fechar</button>
+                                </div>
+                            </section>
+                        )}
                     </div>
                 </div>
             )}
@@ -735,7 +1027,9 @@ export default function Alunos() {
                                                 </span>
                                                 <span className="min-w-0 flex-1">
                                                     <span className={`block truncate font-semibold ${diasRestantes > 0 ? "text-red-700" : "text-slate-900"}`}>{aluno.nome}</span>
-                                                    <span className="mt-0.5 block truncate text-xs text-slate-500">{aluno.tipo === "PROFESSOR" ? "Professor" : "Aluno"}{aluno.serie ? ` · ${aluno.serie}` : ""}</span>
+                                                    <span className="mt-0.5 block truncate text-xs text-slate-500">
+                                                        {aluno.tipo === "PROFESSOR" ? "Professor" : `Aluno${aluno.serie ? ` · ${aluno.serie}` : ""}`}
+                                                    </span>
                                                 </span>
                                                 <span className="shrink-0 font-mono text-xs text-slate-500">#{aluno.id}</span>
                                             </label>
@@ -764,7 +1058,9 @@ export default function Alunos() {
                                         <div key={aluno.id} className="flex items-center justify-between gap-4 rounded-lg border border-[var(--app-border)] bg-[var(--app-surface)] px-3 py-2">
                                             <span className="min-w-0">
                                                 <strong className="block truncate text-slate-900">{aluno.nome}</strong>
-                                                <span className="text-xs text-slate-500">{aluno.tipo === "PROFESSOR" ? "Professor" : "Aluno"}{aluno.serie ? ` · ${aluno.serie}` : ""}</span>
+                                                <span className="text-xs text-slate-500">
+                                                    {aluno.tipo === "PROFESSOR" ? "Professor" : `Aluno${aluno.serie ? ` · ${aluno.serie}` : ""}`}
+                                                </span>
                                             </span>
                                             <span className="shrink-0 font-mono text-xs text-red-700">#{aluno.id}</span>
                                         </div>

@@ -193,6 +193,9 @@ export default function Acervo() {
     const exemplaresEmprestados = selectedLivro
         ? Math.max(0, selectedLivro.unidade - selectedLivro.disponiveis)
         : 0;
+    const estoqueMinimoEdicao = selectedLivro
+        ? Math.min(selectedLivro.unidade, exemplaresEmprestados)
+        : 0;
 
     const totalCopiasSelecionadasExclusao = livrosSelecionadosExclusao.reduce(
         (total, livroItem) => total + livroItem.unidade,
@@ -333,10 +336,10 @@ export default function Acervo() {
             return;
         }
         if (!Number.isSafeInteger(totalInformado)
-            || totalInformado < exemplaresEmprestados
+            || totalInformado < estoqueMinimoEdicao
             || totalInformado > LIMITE_INTEIRO_BANCO) {
             setErroEdicao(
-                `O estoque total deve ser um número inteiro entre ${exemplaresEmprestados} e ${LIMITE_INTEIRO_BANCO.toLocaleString("pt-BR")}.`,
+                `O estoque total deve ser um número inteiro entre ${estoqueMinimoEdicao} e ${LIMITE_INTEIRO_BANCO.toLocaleString("pt-BR")}.`,
             );
             return;
         }
@@ -1101,7 +1104,7 @@ export default function Acervo() {
                                         id="edicao-unidades"
                                         required
                                         type="number"
-                                        min={exemplaresEmprestados}
+                                        min={estoqueMinimoEdicao}
                                         max={LIMITE_INTEIRO_BANCO}
                                         step="1"
                                         name="unidades"
@@ -1111,9 +1114,11 @@ export default function Acervo() {
                                         className="rounded-xl border border-slate-400 bg-white p-2.5 shadow-sm focus:border-cyan-700 focus:outline-none focus:ring-4 focus:ring-cyan-200"
                                     />
                                     <span id="ajuda-estoque-edicao" className="text-xs text-slate-600">
-                                        {formEdicao.unidades !== "" && Number.isInteger(Number(formEdicao.unidades)) && Number(formEdicao.unidades) >= exemplaresEmprestados
-                                            ? `Após salvar, ${Number(formEdicao.unidades) - exemplaresEmprestados} exemplar(es) ficará(ão) disponível(is).`
-                                            : `O mínimo permitido é ${exemplaresEmprestados}, pois há exemplares emprestados.`}
+                                        {formEdicao.unidades !== "" && Number.isInteger(Number(formEdicao.unidades)) && Number(formEdicao.unidades) >= estoqueMinimoEdicao
+                                            ? Number(formEdicao.unidades) - exemplaresEmprestados >= 0
+                                                ? `Após salvar, ${Number(formEdicao.unidades) - exemplaresEmprestados} exemplar(es) ficará(ão) disponível(is).`
+                                                : `Após salvar, o estoque disponível permanecerá em ${Number(formEdicao.unidades) - exemplaresEmprestados}.`
+                                            : `O mínimo permitido neste momento é ${estoqueMinimoEdicao}.`}
                                     </span>
                                 </label>
                             </div>
