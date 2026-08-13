@@ -23,7 +23,7 @@ export default function Sobre() {
                         </p>
                     </header>
 
-                    <section aria-label="Recado dos desenvolvedores" className="app-panel grid gap-7 rounded-2xl p-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,25rem)] xl:p-8">
+                    <section aria-label="Recado da equipe do projeto" className="app-panel grid gap-7 rounded-2xl p-6 xl:grid-cols-[minmax(0,1fr)_minmax(18rem,25rem)] xl:p-8">
                         <article className="flex flex-col justify-center">
                             <span className="mb-5 flex h-14 w-14 items-center justify-center rounded-2xl bg-cyan-100 text-cyan-800">
                                 <IconeCoracao />
@@ -35,7 +35,7 @@ export default function Sobre() {
                                     Se você está vendo isso, parabéns! A escola em que você trabalha ou estuda decidiu usar o EasyLib Manager como sistema principal de sua sala de leitura ou biblioteca.
                                 </p>
                                 <p>
-                                    Não sabemos o quanto isso te comove, mas, para nós, meros desenvolvedores, é muito bom ver uma ideia e um projeto virarem realidade e serem realmente usados em algum lugar, para alguma coisa.
+                                    Não sabemos o quanto isso te comove, mas, para nós, que criamos e desenvolvemos este sistema, é muito bom ver uma ideia virar realidade e ser realmente usada em algum lugar, para alguma coisa.
                                 </p>
                                 <p>
                                     O EasyLib Manager nasceu como nosso projeto integrador para a faculdade, e logo surgiu o desejo de produzir um software que realmente pudesse ser útil e usado todos os dias por alguém. Foi pensando nisso que surgiu a ideia de um sistema para bibliotecas: imaginamos a dificuldade de uma pessoa tentando gerir uma sala de leitura ou biblioteca com papel e caneta — ou, pior ainda, sendo obrigada a aprender a usar um sistema complexo e confuso.
@@ -54,18 +54,29 @@ export default function Sobre() {
 
                             <div className="mt-7 border-t border-cyan-100 pt-5">
                                 <p className="text-sm font-medium text-slate-500">Atenciosamente,</p>
-                                <p className="mt-1 text-lg font-semibold text-slate-900">Desenvolvedores do EasyLib Manager</p>
+                                <p className="mt-1 text-lg font-semibold text-slate-900">Equipe do Projeto Integrador EasyLib Manager</p>
+                                <p className="mt-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm leading-relaxed text-slate-600">
+                                    O desenvolvimento do EasyLib Manager como sistema foi realizado por Lucas e Felipe, responsáveis pelo planejamento técnico, pela programação e pela implementação do software. Miguel e Jorge participaram ativamente de outras frentes do Projeto Integrador acadêmico, sem atuação no desenvolvimento do sistema.
+                                </p>
                                 <ul aria-label="Integrantes da equipe" className="mt-4 grid gap-2 text-sm sm:grid-cols-2">
                                     <li className="rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-3 text-cyan-950">
                                         <strong className="block">Lucas Daniel Tura</strong>
-                                        <span className="text-xs text-cyan-800">Ex-aluno formado no Monsa</span>
+                                        <span className="block text-xs font-semibold text-cyan-800">Desenvolvedor</span>
+                                        <span className="text-xs text-cyan-700">Ex-aluno formado no Monsa</span>
                                     </li>
                                     <li className="rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-3 text-cyan-950">
                                         <strong className="block">Felipe Horacio Mateu</strong>
-                                        <span className="text-xs text-cyan-800">Ex-aluno do Monsa</span>
+                                        <span className="block text-xs font-semibold text-cyan-800">Desenvolvedor</span>
+                                        <span className="text-xs text-cyan-700">Ex-aluno do Monsa</span>
                                     </li>
-                                    <li className="rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-3 font-semibold text-cyan-950">Miguel Rybaltowski Marion</li>
-                                    <li className="rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-3 font-semibold text-cyan-950">Jorge José Martins Neto</li>
+                                    <li className="rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-3 text-cyan-950">
+                                        <strong className="block">Miguel Rybaltowski Marion</strong>
+                                        <span className="text-xs text-cyan-800">Participação ativa no Projeto Integrador</span>
+                                    </li>
+                                    <li className="rounded-xl border border-cyan-200 bg-cyan-50 px-3.5 py-3 text-cyan-950">
+                                        <strong className="block">Jorge José Martins Neto</strong>
+                                        <span className="text-xs text-cyan-800">Participação ativa no Projeto Integrador</span>
+                                    </li>
                                 </ul>
                                 <time dateTime="2026-08-11" className="mt-5 block text-right text-sm font-medium italic text-slate-600">
                                     11/08/2026
